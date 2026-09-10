@@ -143,6 +143,8 @@ holds that it does not recognise.
 | `guest/` | the Go daemon that runs inside a machine and reports to the engine |
 | `image/` | the Omarchy image build |
 | `postman/` | a collection that exercises the whole API |
+| `bin/build-images` | builds the Omarchy container images and the guest daemon |
+| `bin/native-prepare` | prepares a guest image for the native QEMU runtime |
 
 The published npm package is `bin/`, `src/`, `runtime/` and `postman/`. `guest/`
 and `image/` are build inputs.

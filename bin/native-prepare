@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""Prepare a separate Hyperwake guest for the native host runtime."""
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import platform
+import shutil
+import subprocess
+import sys
+
+root = Path(__file__).resolve().parent.parent
+p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--app', type=Path, default=Path('/Applications/Try Omarchy.app'))
+p.add_argument('--output', type=Path, default=root / '.hyperwake/native')
+p.add_argument('--qemu', type=Path, help='Windows/Linux: GPU-capable native QEMU executable')
+a = p.parse_args()
+if platform.system() != 'Darwin':
+    sys.path.insert(0, str(root / 'runtime/native'))
+    from prepare_x86 import prepare
+    prepare(root, a.output, a.qemu)
+    sys.exit(0)
+if platform.machine() != 'arm64':
+    sys.exit('The Mac preview requires Apple Silicon.')
+resources = a.app.resolve() / 'Contents/Resources'
+factory = resources / 'guest'
+runtime = resources / 'runtime'
+subprocess.run(['codesign', '--verify', '--deep', '--strict', str(a.app)], check=True)
+manifest = json.loads((factory / 'guest-manifest.json').read_text())
+if manifest['guest']['architecture'] != 'aarch64':
+    sys.exit('Expected an ARM64 factory image.')
+for artifact in manifest['artifacts']:
+    path = factory / artifact['path']
+    if path.name != artifact['path']:
+        sys.exit('Invalid artifact path.')
+    if path.name not in ('rootfs.ext4.zst', 'vmlinuz-linux', 'initramfs-linux.img'):
+        continue
+    print('Verifying ' + path.name, flush=True)
+    with path.open('rb') as stream:
+        digest = hashlib.file_digest(stream, 'sha256').hexdigest() if hasattr(hashlib, 'file_digest') else None
+    if digest is None:
+        h = hashlib.sha256()
+        with path.open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''): h.update(chunk)
+        digest = h.hexdigest()
+    if digest != artifact['sha256']:
+        sys.exit('Factory artifact checksum failed: ' + path.name)
+out = a.output.resolve()
+out.mkdir(parents=True, exist_ok=True, mode=0o700)
+image = out / 'image'
+if image.exists():
+    sys.exit('Image already exists. Choose another --output; existing images are never overwritten.')
+image.mkdir(mode=0o700)
+subprocess.run([str(runtime / 'bin/zstd'), '-d', '--sparse', str(factory / 'rootfs.ext4.zst'), '-o', str(image / 'root.ext4')], check=True)
+with (image / 'root.ext4').open('r+b') as disk: disk.truncate(16 * 1024**3)
+for name in ('vmlinuz-linux', 'initramfs-linux.img', 'guest-manifest.json', 'provenance.json', 'build-spec.json', 'LICENSE.omarchy', 'packages.lock.txt'):
+    shutil.copy2(factory / name, image / name)
+subprocess.run(['docker', 'run', '--rm', '-e', 'GOOS=linux', '-e', 'GOARCH=arm64', '-e', 'CGO_ENABLED=0',
+    '-v', str(root / 'guest/hyperwake-guest') + ':/src:ro', '-v', str(out) + ':/out', '-w', '/src',
+    'golang:1.24-bookworm', 'go', 'build', '-o', '/out/hyperwake-guest', './cmd/hyperwake-guest'], check=True)
+subprocess.run(['docker', 'build', '-t', 'hyperwake/native-image-tools:local', '-f', str(root / 'runtime/native/prepare.Dockerfile'), str(root / 'runtime/native')], check=True)
+subprocess.run(['docker', 'run', '--rm', '--privileged', '-v', str(image) + ':/work', '-v', str(out) + ':/overlay:ro',
+    '-v', str(root) + ':/repo:ro', 'hyperwake/native-image-tools:local'], check=True)
+config = {'schema': 1, 'architecture': 'aarch64', 'qemu': str(runtime / 'bin/Try Omarchy'),
+    'image': str(image), 'kernel_args': 'root=/dev/vda rw rootwait console=hvc0 systemd.unit=multi-user.target omarchy.qemu_virgl=1',
+    'display': 'cocoa,gl=es,show-cursor=on,full-screen=off,full-grab=off', 'gpu': 'virtio-gpu-gl-pci',
+    'connect_host': 'host.docker.internal', 'guest_endpoint': 'http://10.0.2.2:8080', 'max_running': 2, 'max_memory_mb': 8192}
+(out / 'config.json').write_text(json.dumps(config, indent=2) + '\n')
+print('Prepared Hyperwake image and host configuration: ' + str(out / 'config.json'))
