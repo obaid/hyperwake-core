@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+mkdir -p /run/hyperwake-bootstrap
+mountpoint -q /run/hyperwake-bootstrap || mount -o ro /dev/vdb /run/hyperwake-bootstrap
+# Written by the trusted launcher with shell escaping; unique to this VM.
+set -a
+source /run/hyperwake-bootstrap/identity.env
+set +a
+# Keep the user's runtime directory and D-Bus alive across SSH disconnects.
+loginctl enable-linger dev
+systemctl start user@1000.service
+# The native runner can enlarge a retained root disk before boot.
+resize2fs /dev/vda
+# seatd must start as root before the desktop drops to the dev account.
+groupadd -f seat
+usermod -aG seat,video,render dev
+seatd -g seat &
+for n in $(seq 1 50); do [ -S /run/seatd.sock ] && break; sleep .1; done
+export LIBSEAT_BACKEND=seatd
+exec /usr/local/bin/hyperwake-entrypoint

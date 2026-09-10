@@ -1,0 +1,48 @@
+{
+  "name": "hyperwake",
+  "version": "0.1.0",
+  "description": "Run Omarchy computers on your own machine and drive them over a REST API.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "bin": {
+    "hyperwake": "./bin/hyperwake.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "bin",
+    "src",
+    "runtime",
+    "postman",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "scripts": {
+    "test": "node --test test/unit.test.js",
+    "start": "node bin/hyperwake.js start",
+    "doctor": "node bin/hyperwake.js doctor"
+  },
+  "dependencies": {
+    "@novnc/novnc": "^1.7.0",
+    "ws": "^8.18.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/obaid/hyperwake-core.git"
+  },
+  "homepage": "https://github.com/obaid/hyperwake-core",
+  "bugs": {
+    "url": "https://github.com/obaid/hyperwake-core/issues"
+  },
+  "keywords": [
+    "omarchy",
+    "vm",
+    "qemu",
+    "agent",
+    "sandbox",
+    "desktop",
+    "hyprland"
+  ]
+}

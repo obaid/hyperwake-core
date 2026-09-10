@@ -1,0 +1,5 @@
+node_modules/
+.hyperwake/
+__pycache__/
+*.pyc
+.DS_Store

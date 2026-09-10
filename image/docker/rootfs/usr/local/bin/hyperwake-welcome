@@ -1,0 +1,51 @@
+#!/bin/bash
+# The first terminal the customer sees. Establishes three facts immediately:
+# this is a real persistent machine, here is what is installed, and here is
+# what survives a stop.
+
+clear
+
+AMBER=$'\033[38;5;179m'
+CREAM=$'\033[38;5;223m'
+GREY=$'\033[38;5;244m'
+RESET=$'\033[0m'
+
+# Plain ASCII only. Box-drawing characters render as replacement blocks
+# whenever the terminal font lacks the glyphs, which looks like a broken
+# machine rather than a branded one.
+cat <<BANNER
+
+   ${AMBER}##  ## ##  ## ###   ### ##   ###   ##   ## ##  ## ###${RESET}
+   ${AMBER}##  ## ##  ## ## #  ##  ##   ## #  ##   ## ## ##   ##${RESET}
+   ${AMBER}###### ###### ###   ##  ###  ###   ####### ####    ##${RESET}
+   ${AMBER}##  ##   ##   ## #  ##  ## # ## #  ## # ## ## ##   ##${RESET}
+   ${AMBER}##  ##   ##   ##  # ### ##  ###  # ##   ## ##  ## ###${RESET}
+
+   ${CREAM}HYPERWAKE${RESET}  ${GREY}your computer, in the cloud${RESET}
+
+BANNER
+
+if [ -f /etc/hyperwake/machine-label ]; then
+    printf '   %smachine%s  %s\n' "${GREY}" "${RESET}" "$(cat /etc/hyperwake/machine-label)"
+fi
+
+printf '   %simage%s    %s %s\n' "${GREY}" "${RESET}" \
+    "${HYPERWAKE_IMAGE_SLUG:-hyperwake-dev-desktop}" "${HYPERWAKE_IMAGE_VERSION:-}"
+printf '   %shome%s     /home/dev  %s(persists across stop and wake)%s\n' \
+    "${GREY}" "${RESET}" "${GREY}" "${RESET}"
+
+cat <<TIPS
+
+   ${GREY}This is a development stand-in for the Omarchy image. It is not Omarchy.${RESET}
+
+   ${CREAM}Alt+Return${RESET}  new terminal      ${CREAM}Alt+q${RESET}  close window
+   ${CREAM}Alt+h/j/k/l${RESET} move focus        ${CREAM}Alt+f${RESET}  fullscreen
+
+   Anything you leave in ${CREAM}/home/dev${RESET} is still here when you wake this
+   machine tomorrow. Anything outside it is not.
+
+TIPS
+
+command -v fastfetch >/dev/null 2>&1 && fastfetch --logo none 2>/dev/null
+
+exec bash

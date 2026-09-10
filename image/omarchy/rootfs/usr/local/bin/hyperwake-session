@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+#
+# Start the Omarchy graphical session and expose it over VNC.
+#
+# Omarchy is Hyprland/Wayland. Hyprland 0.56 renders through aquamarine, which
+# needs a DRM render node for buffer allocation on EVERY backend path — DRM,
+# nested Wayland, all of them. On a KVM guest that node exists (virtio-gpu), so
+# this is the production path and it is the only display path this image has.
+#
+# There is deliberately no X11/i3 fallback. Substituting a different desktop
+# when the real one will not start is how an image ends up being called Omarchy
+# while not being Omarchy. If the compositor cannot run, this reports why and
+# exits non-zero so the control plane sees an unhealthy machine.
+
+set -uo pipefail
+
+# Image-specific compatibility settings, controlled by the image builder.
+[ ! -f /etc/hyperwake-session.env ] || source /etc/hyperwake-session.env
+
+log() { printf '{"ts":"%s","level":"%s","source":"session","msg":"%s"}\n' \
+        "$(date -u +%FT%TZ)" "$1" "$2"; }
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=Hyprland
+export WLR_RENDERER="${WLR_RENDERER:-pixman}"
+export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
+
+if [ ! -d /dev/dri ]; then
+    log error "no DRM render node (/dev/dri); Hyprland cannot allocate buffers"
+    log error "this image needs a virtual GPU — it runs on KVM (virtio-gpu), not in a container"
+    exit 78   # EX_CONFIG: the environment is wrong, not the image
+fi
+
+log info "DRM present: $(ls /dev/dri | tr '\n' ' ')"
+
+# seatd gives the compositor a seat when there is no logind session.
+if [ ! -S /run/seatd.sock ]; then
+    seatd -g seat >/var/log/hyperwake-seatd.log 2>&1 &
+    for _ in $(seq 1 25); do [ -S /run/seatd.sock ] && break; sleep 0.2; done
+fi
+
+Hyprland >"${XDG_RUNTIME_DIR}/hyprland-session.log" 2>&1 &
+HYPR_PID=$!
+
+# Wait for the compositor's Wayland socket rather than sleeping and hoping.
+for _ in $(seq 1 100); do
+    for s in "${XDG_RUNTIME_DIR}"/wayland-*; do
+        case "$s" in *.lock) continue ;; esac
+        [ -S "$s" ] && export WAYLAND_DISPLAY="$(basename "$s")" && break 2
+    done
+    kill -0 "$HYPR_PID" 2>/dev/null || { log error "Hyprland exited during startup"; exit 1; }
+    sleep 0.2
+done
+
+if [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    log error "Hyprland produced no Wayland socket within 20s"
+    exit 1
+fi
+
+log info "compositor up on ${WAYLAND_DISPLAY}"
+
+# wayvnc speaks wlr-screencopy, which Hyprland implements. It binds to all
+# interfaces inside the guest only because the guest's own network is private;
+# nothing reaches it except the authenticated Hyperwake desktop gateway.
+exec wayvnc --render-cursor 0.0.0.0 5900

@@ -1,0 +1,12 @@
+[Unit]
+Description=Hyperwake computer services
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/hyperwake-vm-start
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+[Install]
+WantedBy=multi-user.target

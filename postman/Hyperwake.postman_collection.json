@@ -1,0 +1,1003 @@
+{
+  "info": {
+    "name": "Hyperwake Engine",
+    "description": "Omarchy computers on your own machine, over HTTP.\n\n**Setup**\n\n1. Run `npx hyperwake` (or `node bin/hyperwake.js start`). It prints an API URL and a token.\n2. Import the matching environment file, or set the collection variables `baseUrl` and `token` below.\n3. Run **Create machine** first \u2014 it saves the new id into `{{machineId}}` automatically, so every other request just works.\n\n**Order that tells the whole story**\n\nCreate machine \u2192 Get machine (poll until `status` is `ready`) \u2192 Exec \u2192 Write file \u2192 Read file \u2192 Screenshot \u2192 Open desktop \u2192 Stop \u2192 Delete.\n\nOr press **Run** on the `Walkthrough` folder and watch it do all of that with assertions.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:4141",
+      "description": "Printed by the engine on start. No trailing slash."
+    },
+    {
+      "key": "token",
+      "value": "",
+      "description": "Printed by the engine on start; also in ~/.hyperwake/token"
+    },
+    {
+      "key": "machineId",
+      "value": "",
+      "description": "Filled in by Create machine. You should not need to set this by hand."
+    }
+  ],
+  "item": [
+    {
+      "name": "Walkthrough",
+      "description": "Run this folder top to bottom. Every request asserts something, so a red result is a real failure rather than a formatting difference.",
+      "item": [
+        {
+          "name": "0 \u00b7 Auth is enforced",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('an unauthenticated request is refused', () => {",
+                  "  pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1"
+              ]
+            },
+            "description": "Sent deliberately without a token. A 401 here is the pass condition."
+          }
+        },
+        {
+          "name": "1 \u00b7 Discover the API",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('the engine describes itself', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.service).to.eql('hyperwake-engine');",
+                  "  pm.expect(body.endpoints).to.be.an('object');",
+                  "});",
+                  "console.log('host:', JSON.stringify(pm.response.json().host));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1"
+              ]
+            },
+            "description": "Returns the endpoint map and what this host can do \u2014 platform, arch, accelerator."
+          }
+        },
+        {
+          "name": "2 \u00b7 Create machine",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "const created = pm.response.json().data;",
+                  "pm.collectionVariables.set('machineId', created.id);",
+                  "// An active environment shadows collection variables, so set it there too.",
+                  "if (pm.environment.name) pm.environment.set('machineId', created.id);",
+                  "pm.collectionVariables.set('readyTries', 0);",
+                  "console.log('machine', created.id, '->', created.status);",
+                  "pm.test('a fresh machine starts out booting', () => {",
+                  "  pm.expect(['booting', 'starting', 'ready']).to.include(created.status);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"postman\",\n  \"vcpus\": 4,\n  \"memory_mb\": 4096,\n  \"disk_gb\": 40\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines"
+              ]
+            },
+            "description": "Creates a **fresh Omarchy instance** and starts it. Every field is optional; the defaults are the body shown.\n\nThe new id is saved to `{{machineId}}` for the rest of the collection."
+          }
+        },
+        {
+          "name": "3 \u00b7 Wait until ready",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const current = pm.response.json().data;",
+                  "console.log('status:', current.status);",
+                  "const tries = Number(pm.collectionVariables.get('readyTries') || 0) + 1;",
+                  "pm.collectionVariables.set('readyTries', tries);",
+                  "",
+                  "// `ready` means the guest reported in for *this* boot and its shell works,",
+                  "// not merely that a process started. Poll until then.",
+                  "if (current.status === 'ready') {",
+                  "  pm.test('reached ready', () => pm.expect(current.status).to.eql('ready'));",
+                  "  pm.test('the guest reported its capabilities', () => {",
+                  "    pm.expect(current.capabilities).to.be.an('object');",
+                  "  });",
+                  "} else if (tries > 40) {",
+                  "  pm.test('reached ready', () => { throw new Error('still ' + current.status + ' after 40 polls'); });",
+                  "} else {",
+                  "  // pm.execution is the modern API; postman.* is the fallback for older runners.",
+                  "  const again = '3 \u00b7 Wait until ready';",
+                  "  if (pm.execution && pm.execution.setNextRequest) pm.execution.setNextRequest(again);",
+                  "  else postman.setNextRequest(again);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}"
+              ]
+            },
+            "description": "Re-runs itself until `status` is `ready` \u2014 usually six to ten seconds.\n\nStatuses: `booting`, `ready`, `stopped`, and `unknown`. **`unknown` is a real answer**: it means the runtime cannot see the machine, which is not the same as the machine having stopped."
+          }
+        },
+        {
+          "name": "4 \u00b7 Exec \u2014 prove it is Omarchy",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const shell = pm.response.json().data;",
+                  "console.log(shell.stdout);",
+                  "pm.test('command succeeded', () => pm.expect(shell.exit_code).to.eql(0));",
+                  "pm.test('it is really Arch Linux ARM', () => pm.expect(shell.stdout).to.include('Arch Linux ARM'));",
+                  "pm.test('Hyprland is running', () => pm.expect(shell.stdout).to.match(/Hyprland/));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"exec\",\n  \"command\": \"grep PRETTY /etc/os-release; uname -m; pgrep -a Hyprland | head -1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            },
+            "description": "Runs a shell command over SSH as `dev`. Returns `exit_code`, `stdout`, `stderr`, plus `timed_out` and `truncated` so you can tell a slow command from a quiet one."
+          }
+        },
+        {
+          "name": "5 \u00b7 Write a file",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const written = pm.response.json().data;",
+                  "pm.test('written', () => pm.expect(written.bytes_written).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"write_file\",\n  \"path\": \"~/hello.txt\",\n  \"content\": \"round trip\\n\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            },
+            "description": "`~` expands in the guest. Parent directories are created."
+          }
+        },
+        {
+          "name": "6 \u00b7 Read it back",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const file = pm.response.json().data;",
+                  "const text = Buffer.from(file.content_base64, 'base64').toString('utf8');",
+                  "console.log('content:', JSON.stringify(text));",
+                  "pm.test('exact bytes preserved, trailing newline included', () => {",
+                  "  pm.expect(text).to.eql('round trip\\n');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"read_file\",\n  \"path\": \"~/hello.txt\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            },
+            "description": "Returns `content_base64` and `size`. Base64 because a file is bytes, not text \u2014 the trailing newline is the byte a file API most often loses.\n\nFiles over 1 MiB are refused; use `exec` to select a smaller portion."
+          }
+        },
+        {
+          "name": "7 \u00b7 Screenshot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const shot = pm.response.json().data;",
+                  "pm.test('a PNG came back', () => {",
+                  "  pm.expect(shot.mime_type).to.eql('image/png');",
+                  "  pm.expect(shot.image_base64.length).to.be.above(1000);",
+                  "});",
+                  "console.log('png bytes (base64):', shot.image_base64.length);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"screenshot\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            },
+            "description": "Captures the guest's screen over its VNC socket. Returns `mime_type` and `image_base64`."
+          }
+        },
+        {
+          "name": "8 \u00b7 Open the desktop",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const desktop = pm.response.json().data;",
+                  "pm.test('the ticket travels in the URL fragment', () => {",
+                  "  pm.expect(desktop.desktop_url).to.include('/desktop#t=');",
+                  "});",
+                  "console.log('OPEN THIS IN A BROWSER:');",
+                  "console.log(desktop.desktop_url);",
+                  "console.log('(single use, ' + desktop.expires_in + 's)');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/desktop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "desktop"
+              ]
+            },
+            "description": "Mints a browser URL for the screen. **Copy it from the Postman console and open it in a browser** to see the live Omarchy desktop.\n\nThe ticket sits in the URL *fragment*, which browsers never send to a server \u2014 so it stays out of access logs and `Referer` headers. Single use, sixty seconds."
+          }
+        },
+        {
+          "name": "9 \u00b7 Stop",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('accepted', () => pm.response.to.have.status(200));",
+                  "console.log('status:', pm.response.json().data.status);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"force\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "stop"
+              ]
+            },
+            "description": "Asks the guest to shut down. `{\"force\": true}` cuts power instead \u2014 faster, and the guest gets no say."
+          }
+        },
+        {
+          "name": "10 \u00b7 Delete",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('deleted', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('machineId', '');",
+                  "if (pm.environment.name) pm.environment.set('machineId', '');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}"
+              ]
+            },
+            "description": "Stops the machine if it is still running, then destroys it and its disk.\n\nIf the teardown fails, the machine stays registered and you get a 502 saying why \u2014 a delete that cannot remove a machine must not quietly forget it."
+          }
+        },
+        {
+          "name": "11 \u00b7 Nothing left behind",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const machines = pm.response.json().data;",
+                  "console.log('machines remaining:', machines.length);",
+                  "pm.test('no leftovers from this run', () => {",
+                  "  pm.expect(machines.filter((m) => m.name === 'postman')).to.have.length(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines"
+              ]
+            },
+            "description": "The check that matters. A lifecycle that leaves a machine behind has not worked, however green the earlier steps look."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Machines",
+      "description": "The lifecycle endpoints on their own, for poking at by hand.",
+      "item": [
+        {
+          "name": "List machines",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create machine",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const made = pm.response.json().data;",
+                  "  pm.collectionVariables.set('machineId', made.id);",
+                  "  if (pm.environment.name) pm.environment.set('machineId', made.id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"scratch\",\n  \"vcpus\": 4,\n  \"memory_mb\": 4096,\n  \"disk_gb\": 40\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines"
+              ]
+            },
+            "description": "Bounds: `vcpus` 1\u20138, `memory_mb` 1024\u201316384, `disk_gb` 16\u20131024. All optional."
+          }
+        },
+        {
+          "name": "Get machine",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Start machine",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "start"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Stop machine (graceful)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"force\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "stop"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Stop machine (force)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"force\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "stop"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete machine",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Open desktop",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/desktop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "desktop"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Actions",
+      "description": "Everything you can do inside a machine. One verb per request, all on `POST /v1/machines/{id}/actions`.",
+      "item": [
+        {
+          "name": "exec",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"exec\",\n  \"command\": \"ls -la ~\",\n  \"timeout\": 30\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            },
+            "description": "`timeout` is seconds, 1\u2013120."
+          }
+        },
+        {
+          "name": "read_file",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"read_file\",\n  \"path\": \"~/hello.txt\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "write_file",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"write_file\",\n  \"path\": \"~/hello.txt\",\n  \"content\": \"hello from postman\\n\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "screenshot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"screenshot\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "click",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"click\",\n  \"x\": 640,\n  \"y\": 400,\n  \"button\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            },
+            "description": "`button`: 1 left, 2 middle, 3 right. The screen is 1280\u00d7800."
+          }
+        },
+        {
+          "name": "move",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"move\",\n  \"x\": 640,\n  \"y\": 400\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "scroll",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"scroll\",\n  \"direction\": \"down\",\n  \"amount\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "type",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"type\",\n  \"text\": \"hello world\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"key\",\n  \"key\": \"super\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/v1/machines/{{machineId}}/actions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "machines",
+                "{{machineId}}",
+                "actions"
+              ]
+            },
+            "description": "Single keys or combinations joined with `-`, e.g. `super`, `enter`, `ctrl-c`, `super-return`.\n\nIn Omarchy: `super-return` opens a terminal, `super-space` the launcher, `super-k` the keybinding cheatsheet."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health (no auth needed)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Reports whether the engine is up and whether its QEMU runtime is answering."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+"""Export Hyperwake's Docker-built x86 guest for native Linux/Windows QEMU."""
+import json
+from pathlib import Path
+import platform
+import subprocess
+import sys
+import uuid
+
+
+def prepare(root, output, qemu):
+    if platform.system() not in ('Windows', 'Linux') or platform.machine().lower() not in ('amd64', 'x86_64'):
+        raise SystemExit('The native x86 preview supports Windows/Linux x86_64 hosts only.')
+    if not qemu or not qemu.is_file():
+        raise SystemExit('Supply --qemu with the GPU-capable qemu-system-x86_64 executable. See docs/platforms.md.')
+    output = output.resolve()
+    image = output / 'image'
+    if image.exists(): raise SystemExit('Image exists. Use a new --output; existing disks are never overwritten.')
+    subprocess.run([sys.executable, str(root / 'bin/build-images'), '--guest-only'], check=True)
+    image.mkdir(parents=True, mode=0o700)
+    name = 'hyperwake-export-' + uuid.uuid4().hex[:12]
+    subprocess.run(['docker', 'create', '--name', name, 'hyperwake/omarchy-kvm:local'], check=True, stdout=subprocess.DEVNULL)
+    try:
+        subprocess.run(['docker', 'cp', name + ':/opt/hyperwake/.', str(image)], check=True)
+    finally:
+        subprocess.run(['docker', 'rm', '-v', name], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(['docker', 'run', '--rm', '--entrypoint', 'zstd', '-v', str(image) + ':/output',
+                    'hyperwake/omarchy-kvm:local', '-d', '--sparse', '/output/root.ext4.zst', '-o', '/output/root.ext4'], check=True)
+    (image / 'root.ext4.zst').unlink()
+    windows = platform.system() == 'Windows'
+    config = {'schema': 1, 'architecture': 'x86_64', 'qemu': str(qemu.resolve()), 'image': str(image),
+              'kernel_args': 'root=/dev/vda rw rootwait console=hvc0 systemd.unit=multi-user.target',
+              'display': 'sdl,gl=on' if windows else 'egl-headless', 'gpu': 'virtio-vga-gl',
+              'cpu': 'host', 'connect_host': 'host.docker.internal', 'guest_endpoint': 'http://10.0.2.2:8080',
+              'max_running': 2, 'max_memory_mb': 8192}
+    (output / 'config.json').write_text(json.dumps(config, indent=2) + '\n')
+    print('Native x86 preview prepared. Hardware validation is required: ' + str(output / 'config.json'))

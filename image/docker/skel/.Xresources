@@ -1,0 +1,31 @@
+! urxvt, themed to match the Hyperwake palette.
+
+URxvt.font:            xft:JetBrains Mono:size=11
+URxvt.boldFont:        xft:JetBrains Mono:style=Bold:size=11
+URxvt.letterSpace:     0
+URxvt.internalBorder:  14
+URxvt.scrollBar:       false
+URxvt.cursorBlink:     true
+URxvt.saveLines:       10000
+
+URxvt.background:      #0d0c0b
+URxvt.foreground:      #e8e0d4
+URxvt.cursorColor:     #d78a3c
+
+! black / red / green / yellow / blue / magenta / cyan / white
+URxvt.color0:  #1a1917
+URxvt.color8:  #5c574f
+URxvt.color1:  #c25a4a
+URxvt.color9:  #d97364
+URxvt.color2:  #8a9a5b
+URxvt.color10: #a4b56f
+URxvt.color3:  #d78a3c
+URxvt.color11: #e0a45f
+URxvt.color4:  #6b8a9a
+URxvt.color12: #85a3b5
+URxvt.color5:  #a67f9a
+URxvt.color13: #bf9bb5
+URxvt.color6:  #7fa39a
+URxvt.color14: #9bbdb3
+URxvt.color7:  #e8e0d4
+URxvt.color15: #f5efe6
