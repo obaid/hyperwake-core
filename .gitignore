@@ -3,3 +3,7 @@ node_modules/
 __pycache__/
 *.pyc
 .DS_Store
+
+# Compiled guest daemons. Build them with `make -C guest/hyperwake-guest`.
+guest/hyperwake-guest/bin/
+image/*/bin/hyperwake-guest*
