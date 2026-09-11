@@ -179,15 +179,8 @@ would leave you with a VM nobody can name.
 
 ## Building your own image
 
-The downloaded image suits most people. Build your own if you want different
-packages, or if you would rather not download one.
-
-This needs Docker running, because it compiles the guest daemon and injects it
-into the root filesystem in a privileged container. On Apple Silicon it also
-needs [Try Omarchy](https://github.com/omacom/try-omarchy) installed in
-`/Applications`, which is where the base Omarchy filesystem comes from. The
-script verifies that app's code signature and the checksum of every artifact it
-takes. Neither is used again afterwards.
+The downloaded image suits most people. Build your own to change the package set,
+or to avoid the download.
 
 ```sh
 git clone https://github.com/obaid/hyperwake-core
@@ -196,9 +189,12 @@ npm install
 python3 bin/native-prepare --output ~/.hyperwake
 ```
 
-That writes `~/.hyperwake/image`, which is where the engine looks. Pass a
-different `--output` only if you also set `HYPERWAKE_HOME` to match. Existing
-images are never overwritten; move the old directory aside to rebuild.
+The script checks its own prerequisites first and names anything missing before
+it starts work.
+
+That writes `~/.hyperwake/image`, which is where the engine looks. If you pass a
+different `--output`, set `HYPERWAKE_HOME` to match. The script never overwrites
+an existing image, so move the old directory aside to rebuild.
 
 ## Connecting an agent
 

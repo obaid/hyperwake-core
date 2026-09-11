@@ -21,11 +21,29 @@ if platform.system() != 'Darwin':
     prepare(root, a.output, a.qemu)
     sys.exit(0)
 if platform.machine() != 'arm64':
-    sys.exit('The Mac preview requires Apple Silicon.')
+    sys.exit('Building an image on a Mac requires Apple Silicon.')
+
+# Check what this needs before doing any work, so a missing prerequisite reads
+# as one sentence rather than a traceback from whichever step hit it first.
+if not shutil.which('docker'):
+    sys.exit('Install Docker. The build compiles the guest daemon and assembles the\n'
+             'root filesystem inside containers.')
+if subprocess.run(['docker', 'info'], capture_output=True).returncode != 0:
+    sys.exit('Start Docker. The build compiles the guest daemon and assembles the\n'
+             'root filesystem inside containers.')
+if not a.app.exists():
+    sys.exit(f'No app at {a.app}.\n'
+             'The base Omarchy filesystem comes from a Try Omarchy install:\n'
+             '  https://github.com/omacom/try-omarchy/releases\n'
+             'Pass --app to point somewhere else. Nothing from it is used once the\n'
+             'image exists; machines run under your own QEMU.')
+
 resources = a.app.resolve() / 'Contents/Resources'
 factory = resources / 'guest'
 runtime = resources / 'runtime'
-subprocess.run(['codesign', '--verify', '--deep', '--strict', str(a.app)], check=True)
+if subprocess.run(['codesign', '--verify', '--deep', '--strict', str(a.app)],
+                  capture_output=True).returncode != 0:
+    sys.exit(f'{a.app} failed signature verification. Reinstall it before building from it.')
 manifest = json.loads((factory / 'guest-manifest.json').read_text())
 if manifest['guest']['architecture'] != 'aarch64':
     sys.exit('Expected an ARM64 factory image.')

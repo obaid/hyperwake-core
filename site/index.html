@@ -468,12 +468,6 @@ curl -X POST $API/machines/$ID/actions -H <span class="a">"Authorization: Bearer
     <h2>Build your own guest image</h2>
     <p class="lede">Most people use the downloaded image. Build your own to change the package set, or to avoid the download.</p>
 
-    <div class="box hot">
-      <span class="lbl">Building needs more than running does</span>
-      <p>The build needs Docker running. It compiles the guest daemon and injects it into the root filesystem inside a privileged container. On Apple Silicon it also reads the base Omarchy filesystem from a <a href="https://github.com/omacom/try-omarchy">Try Omarchy</a> install in <code>/Applications</code>, and verifies that app's signature and every artifact's checksum.</p>
-      <p>Once the image exists, the engine uses neither again. Machines run under your own QEMU.</p>
-    </div>
-
 <pre><code>git clone https://github.com/obaid/hyperwake-core
 cd hyperwake-core && npm install
 python3 bin/native-prepare --output ~/.hyperwake</code></pre>

@@ -43,14 +43,12 @@ npx hyperwake doctor
 It reports what it found rather than what it assumes, and names anything that is
 missing.
 
-Machines are cloned from a base image. The first time you run the engine it
-downloads one, verifies its checksums and puts it in place, so there is no
-second command to learn.
+Machines are cloned from a base image. The first run downloads one, verifies its
+checksums, and puts it in place, so you learn no second command.
 
-Point `HYPERWAKE_IMAGE_URL` at your own manifest to use a different image, or
-build one yourself with `bin/native-prepare`. Building needs Docker, and on
-Apple Silicon a copy of Try Omarchy to take the base filesystem from.
-[Getting started](docs/getting-started.md) covers both.
+Set `HYPERWAKE_IMAGE_URL` to use a different image, or build one with
+`bin/native-prepare`. The script checks its own prerequisites and names anything
+missing. [Getting started](docs/getting-started.md) covers both.
 
 ## Your first computer
 
