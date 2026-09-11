@@ -37,26 +37,50 @@ function progress(label, done, total) {
 }
 
 /**
+ * Stream one artifact's bytes, in order, from however many URLs hold them.
+ *
+ * Large artifacts are split because a single multi-gigabyte upload is the
+ * least reliable thing in the chain. Splitting also means a failed download
+ * retries one part rather than the whole image.
+ */
+async function* artifactBytes(artifact, onChunk) {
+  const parts = artifact.parts ?? [{ url: artifact.url, bytes: artifact.bytes }];
+  for (const [index, part] of parts.entries()) {
+    let response;
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        response = await fetch(part.url, { redirect: 'follow' });
+        if (response.ok) break;
+        throw new Error(`HTTP ${response.status}`);
+      } catch (error) {
+        if (attempt >= 3) throw new Error(`${artifact.name} part ${index + 1}: ${error.message}`);
+        await new Promise((r) => setTimeout(r, attempt * 2000));
+      }
+    }
+    for await (const chunk of Readable.fromWeb(response.body)) {
+      onChunk(chunk);
+      yield chunk;
+    }
+  }
+}
+
+/**
  * Fetch one artifact, verifying as the bytes arrive.
  *
- * The digest is computed on the compressed stream, which is what the manifest
- * records, so a truncated or tampered download fails before anything is moved
- * into place rather than after.
+ * The digest covers the whole compressed stream across every part, so a
+ * truncated or tampered download fails before anything moves into place.
  */
 async function fetchArtifact(artifact, into) {
-  const response = await fetch(artifact.url, { redirect: 'follow' });
-  if (!response.ok) throw new Error(`${artifact.name}: HTTP ${response.status}`);
-
-  const total = Number(response.headers.get('content-length')) || artifact.bytes || 0;
+  const total = artifact.bytes
+    ?? (artifact.parts ?? []).reduce((sum, part) => sum + (part.bytes ?? 0), 0);
   const digest = createHash('sha256');
   let seen = 0;
 
-  const counted = Readable.fromWeb(response.body).map((chunk) => {
+  const counted = Readable.from(artifactBytes(artifact, (chunk) => {
     digest.update(chunk);
     seen += chunk.length;
     progress(artifact.name, seen, total);
-    return chunk;
-  });
+  }));
 
   const target = join(into, artifact.name);
   const stages = artifact.compression === 'zstd'

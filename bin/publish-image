@@ -46,6 +46,8 @@ def main():
     p.add_argument('--repo', default='obaid/hyperwake-core')
     p.add_argument('--tag', help='GitHub release tag to upload to; omit to build only')
     p.add_argument('--version', help='version label recorded in the manifest')
+    p.add_argument('--part-mb', type=int, default=256,
+                   help='split large artifacts into parts of this size (0 to disable)')
     a = p.parse_args()
 
     image = a.image.resolve()
@@ -84,14 +86,40 @@ def main():
         subprocess.run(['zstd', '-3', '-T0', '-q', str(rootfs), '-o', str(compressed)], check=True)
 
     base = f'https://github.com/{a.repo}/releases/download/{a.tag or "TAG"}'
-    artifacts = [{
+
+    # A single multi-gigabyte upload is the least reliable step in the chain,
+    # and a failed download of one costs the whole thing. Parts fix both.
+    part_bytes = a.part_mb * 1024 * 1024
+    uploads = []
+    rootfs_artifact = {
         'name': ROOTFS,
-        'url': f'{base}/{ROOTFS}.zst',
         'sha256': digest(compressed),
         'bytes': compressed.stat().st_size,
         'compression': 'zstd',
         'sparse_bytes': sparse_bytes,
-    }]
+    }
+    if part_bytes and rootfs_artifact['bytes'] > part_bytes:
+        for old_part in out.glob(f'{ROOTFS}.zst.part*'):
+            old_part.unlink()
+        parts = []
+        with compressed.open('rb') as source:
+            index = 0
+            while True:
+                chunk = source.read(part_bytes)
+                if not chunk:
+                    break
+                name = f'{ROOTFS}.zst.part{index:03d}'
+                (out / name).write_bytes(chunk)
+                parts.append({'url': f'{base}/{name}', 'bytes': len(chunk)})
+                uploads.append(str(out / name))
+                index += 1
+        rootfs_artifact['parts'] = parts
+        print(f'Split into {len(parts)} parts of up to {a.part_mb} MB')
+    else:
+        rootfs_artifact['url'] = f'{base}/{ROOTFS}.zst'
+        uploads.append(str(compressed))
+
+    artifacts = [rootfs_artifact]
 
     for name in SIDECARS:
         source = image / name
@@ -125,7 +153,7 @@ def main():
     if not shutil.which('gh'):
         sys.exit('The GitHub CLI is required to upload. https://cli.github.com')
 
-    assets = [str(out / 'manifest.json'), str(compressed)] + \
+    assets = [str(out / 'manifest.json')] + uploads + \
              [str(out / x['name']) for x in artifacts if x['name'] != ROOTFS]
 
     existing = subprocess.run(['gh', 'release', 'view', a.tag, '--repo', a.repo],
