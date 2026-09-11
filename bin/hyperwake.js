@@ -64,8 +64,18 @@ if (command === 'doctor') {
   process.exit(0);
 }
 
+if (command === 'mcp') {
+  // stdout belongs to the JSON-RPC stream from here on. The host check is
+  // deliberately skipped: this process talks to an engine over HTTP and does not
+  // care whether QEMU exists here. Reporting on a missing hypervisor would only
+  // arrive as a crash inside somebody's editor.
+  const { runMcpServer } = await import('../src/mcp/index.js');
+  await runMcpServer();
+  process.exit(0);
+}
+
 if (command !== 'start') {
-  console.log('usage: hyperwake [start|doctor] [--port=4141]');
+  console.log('usage: hyperwake [start|doctor|mcp] [--port=4141]');
   process.exit(1);
 }
 

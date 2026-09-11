@@ -21,7 +21,7 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
-    "test": "node --test test/unit.test.js",
+    "test": "node --test test/*.test.js",
     "start": "node bin/hyperwake.js start",
     "doctor": "node bin/hyperwake.js doctor"
   },
