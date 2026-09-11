@@ -28,14 +28,35 @@ function reportHost(host) {
   if (host.qemu) {
     console.log(`  graphics      ${host.acceleratedGraphics ? green('accelerated (virgl)') : 'software (llvmpipe)'}`);
   }
+  console.log(`  guest image   ${host.image ? green('yes') : red('none')} ${dim(host.imagePath)}`);
+}
+
+/**
+ * A missing image is not the same failure as a missing hypervisor.
+ * The host is fine; there is simply nothing to clone yet, so say how to fix it.
+ */
+function explainMissingImage(host) {
+  const home = host.imagePath.replace(/\/image$/, '');
+  console.log(`\n${red('No guest image.')} Machines are cloned from one, and you build it once.\n`);
+  console.log('  That step needs Docker running, and on Apple Silicon a copy of Try');
+  console.log('  Omarchy in /Applications to take the base filesystem from. Neither is');
+  console.log('  used again once the image exists.\n');
+  console.log(dim('    git clone https://github.com/obaid/hyperwake-core'));
+  console.log(dim('    cd hyperwake-core && npm install'));
+  console.log(dim(`    python3 bin/native-prepare --output ${home}`));
+  console.log(`\n  ${dim('https://obaid.github.io/hyperwake-core/#image')}\n`);
 }
 
 if (command === 'doctor') {
   const host = inspectHost();
   console.log(bold('\nHyperwake engine — host check\n'));
   reportHost(host);
-  if (!host.ready) {
+  if (!host.hostReady) {
     console.log(`\n${red('Not ready.')} ${host.reason}\n`);
+    process.exit(1);
+  }
+  if (!host.image) {
+    explainMissingImage(host);
     process.exit(1);
   }
   console.log(`\n${green('Ready.')}\n`);
@@ -48,10 +69,16 @@ if (command !== 'start') {
 }
 
 const host = inspectHost();
-if (!host.ready) {
+if (!host.hostReady) {
   console.log(bold('\nHyperwake engine\n'));
   reportHost(host);
   console.log(`\n${red('Cannot start.')} ${host.reason}\n`);
+  process.exit(1);
+}
+if (!host.image) {
+  console.log(bold('\nHyperwake engine\n'));
+  reportHost(host);
+  explainMissingImage(host);
   process.exit(1);
 }
 

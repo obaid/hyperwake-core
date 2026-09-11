@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { arch, platform } from 'node:os';
+import { statePath } from './paths.js';
 
 function has(command, args = ['--version']) {
   try {
@@ -51,6 +53,11 @@ export function inspectHost() {
     accelerator: null,
     ready: false,
     reason: null,
+    // A host that can run virtual machines still cannot make one without a
+    // base image to clone. Reported separately because the remedy is
+    // different: one is "install something", the other is "build an image".
+    image: existsSync(join(statePath('image'), 'root.ext4')),
+    imagePath: statePath('image'),
   };
 
   // An operator may point at any QEMU they trust. Useful for testing a stock
@@ -105,6 +112,10 @@ export function inspectHost() {
     }
   }
 
-  report.ready = Boolean(report.qemu) && report.python && report.ssh && !report.reason;
+  report.hostReady = Boolean(report.qemu) && report.python && report.ssh && !report.reason;
+  report.ready = report.hostReady && report.image;
+  if (report.hostReady && !report.image) {
+    report.reason = `No guest image at ${report.imagePath}. Build one: see https://obaid.github.io/hyperwake-core/#image`;
+  }
   return report;
 }
