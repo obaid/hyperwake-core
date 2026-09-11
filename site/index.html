@@ -243,6 +243,7 @@
     <nav>
       <a href="#start">Start</a>
       <a href="#drive">Control</a>
+      <a href="#mcp">MCP</a>
       <a href="#api">API</a>
       <a href="#states">States</a>
       <a href="#trouble">Troubleshooting</a>
@@ -372,6 +373,49 @@ curl -X POST $API/machines/$ID/actions -H <span class="a">"Authorization: Bearer
 
 <span class="d">{"data": {"desktop_url": "http://127.0.0.1:4141/desktop#t=...", "expires_in": 60}}</span></code></pre>
     <p>Open that URL in a browser to see the live desktop. The mouse and keyboard work. The ticket travels in the URL fragment, which browsers never send to a server, so it stays out of access logs and referrer headers. Each ticket works once and expires after 60 seconds.</p>
+  </section>
+
+  <section id="mcp">
+    <h2>Use it from an agent you already have</h2>
+    <p class="lede">The engine ships an MCP server, so Claude Code, Claude Desktop, Cursor and anything else that speaks MCP can drive a machine. You write config, not code.</p>
+
+<pre><code>claude mcp add hyperwake -- npx -y hyperwake mcp</code></pre>
+
+    <p>Or, for a client that wants JSON:</p>
+
+<pre><code>{
+  <span class="g">"mcpServers"</span>: {
+    <span class="g">"hyperwake"</span>: {
+      <span class="g">"command"</span>: <span class="a">"npx"</span>,
+      <span class="g">"args"</span>: [<span class="a">"-y"</span>, <span class="a">"hyperwake"</span>, <span class="a">"mcp"</span>]
+    }
+  }
+}</code></pre>
+
+    <p>Then ask for something that needs a computer.</p>
+
+    <div class="term">
+      <div class="chrome"><i></i><i></i><i></i><span>claude</span></div>
+<pre><span class="p">&gt;</span> make me a linux machine, install neovim, and show me the desktop
+
+  <span class="d">create_machine</span>   ready in 7s
+  <span class="d">start_task</span>       pacman -S neovim
+  <span class="d">check_task</span>       downloading... installed
+  <span class="d">open_desktop</span>     http://127.0.0.1:4141/desktop#t=...
+
+  <span class="g">Done.</span> neovim 0.11.4 is installed. The link opens the live
+  desktop, and it expires in a minute.</pre>
+    </div>
+
+    <p>Seventeen tools: machines, the shell, files and the screen. <code>screenshot</code> hands the agent a picture of the desktop, which is what lets a model that has never heard of Hyperwake look at a window and click the right thing.</p>
+
+    <div class="box">
+      <span class="lbl">Two things the tools get right for you</span>
+      <p><code>run_command</code> stops at 120 seconds, so installs and builds go through <code>start_task</code>, which detaches the process and returns a handle to poll. That is also how the agent reports progress instead of going quiet for four minutes.</p>
+      <p>The engine has to be running. If it is not, the tools say so and name the command, rather than failing in a way that looks like a broken server.</p>
+    </div>
+
+    <p><a href="https://github.com/obaid/hyperwake-core/blob/main/docs/mcp.md">Full MCP setup</a>, including Claude Desktop, Cursor, and what to do when something goes wrong.</p>
   </section>
 
   <section id="api">

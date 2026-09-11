@@ -92,6 +92,19 @@ desktop, mouse and keyboard included.
 [Getting started](docs/getting-started.md) walks through the same path in more
 detail, including cleaning up afterwards.
 
+## Use it from Claude Code
+
+The engine ships an MCP server, so an agent you already use can drive a machine.
+No code, one line of config:
+
+```sh
+claude mcp add hyperwake -- npx -y hyperwake mcp
+```
+
+Then ask for something that needs a computer: *"make me a Linux machine, install
+neovim, and show me the desktop."* [Full setup](docs/mcp.md), including Claude
+Desktop and Cursor.
+
 ## The API
 
 Every request needs `Authorization: Bearer <token>`. `GET /v1` lists the
@@ -121,6 +134,7 @@ The full docs are at **[hyperwake.ai](https://hyperwake.ai)**. The same pages li
 in this repository:
 
 - [Getting started](docs/getting-started.md), from install to a working computer
+- [MCP](docs/mcp.md), using Hyperwake from Claude Code and other agents
 - [API reference](docs/api.md), every endpoint and action
 - [Concepts](docs/concepts.md), what a machine is and what its states mean
 - [Troubleshooting](docs/troubleshooting.md), failures you are likely to hit

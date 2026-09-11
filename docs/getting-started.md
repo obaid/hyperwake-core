@@ -208,6 +208,7 @@ curl -s $API -H "Authorization: Bearer $TOKEN"
 
 ## Next
 
+- [MCP](mcp.md) to drive a machine from Claude Code or another agent you already use
 - [API reference](api.md) for every endpoint and action
 - [Concepts](concepts.md) for what the states mean and where data lives
 - [Troubleshooting](troubleshooting.md) when something does not work
