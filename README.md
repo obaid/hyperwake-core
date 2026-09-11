@@ -156,14 +156,13 @@ that made it.
 
 ## Licence
 
-[FSL-1.1-ALv2](LICENSE.md). The source is public, and you can read it, change it,
-and run it for anything you like, including inside a business. What you may not
-do is package it up as a competing commercial product or service. Two years
-after each release, that version converts to Apache 2.0 and the restriction
-lifts entirely.
+[PolyForm Noncommercial 1.0.0](LICENSE.md). You may read, change, and run this
+software for any noncommercial purpose. That covers personal projects, research,
+teaching, and use by charities, schools, and government bodies. Commercial use
+requires a separate licence.
 
-That makes this fair source rather than open source in the OSI sense, which is
-worth stating plainly rather than blurring.
+This licence is not open source. The source is published and you can read it,
+but the terms restrict who may use it.
 
 Omarchy and the bundled dependencies keep their own licences. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Hyperwake is independent and

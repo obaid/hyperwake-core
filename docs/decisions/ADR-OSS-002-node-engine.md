@@ -109,11 +109,12 @@ what generation fencing and the evidence model are *for*.
 - The panel's `Native`/`Docker` drivers can eventually be retired in favour of
   talking to a local engine, so there is one implementation of "run a VM on a
   host" rather than two.
-- Licence: the engine ships under FSL-1.1-ALv2, which permits every use except
-  packaging it as a competing commercial product, and converts each release to
-  Apache 2.0 after two years. ADR-OSS-001 proposed AGPL; the split makes the
-  stricter choice workable, because the panel is a separate program talking over
-  a documented network protocol rather than a derivative work.
+- Licence: the engine ships under PolyForm Noncommercial 1.0.0. Any
+  noncommercial purpose is permitted; commercial use needs a separate licence.
+  ADR-OSS-001 proposed AGPL, which would have let anyone build a commercial
+  product on the engine. The split makes the stricter choice workable, because
+  the panel talks to the engine over a documented network protocol rather than
+  linking against it.
 
 ## Sequence
 

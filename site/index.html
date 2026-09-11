@@ -242,10 +242,10 @@
     <span class="mark">hyperwake<b>.</b></span>
     <nav>
       <a href="#start">Start</a>
-      <a href="#drive">Drive it</a>
+      <a href="#drive">Control</a>
       <a href="#api">API</a>
       <a href="#states">States</a>
-      <a href="#trouble">Trouble</a>
+      <a href="#trouble">Troubleshooting</a>
       <a href="https://github.com/obaid/hyperwake-core">GitHub</a>
     </nav>
   </div>
@@ -256,7 +256,7 @@
   <header class="hero">
     <h1 class="wordmark">hyperwake</h1>
     <p class="pitch">Throwaway Omarchy computers for your agents.</p>
-    <p class="sub">Each one is a real Arch and Hyprland desktop running in its own virtual machine on hardware you already own. Making one takes about a second, and it is ready to use about seven seconds later, so you can throw one away and start again whenever it suits you.</p>
+    <p class="sub">Each machine runs Arch Linux and Hyprland in its own virtual machine, on hardware you already own. Creating one takes about a second. It accepts commands about seven seconds later.</p>
 
     <div class="cta">
       <a class="btn" href="#start">Get started</a>
@@ -285,38 +285,38 @@
   </header>
 
   <section id="what">
-    <h2>A whole computer, not a sandbox</h2>
-    <p>Every machine boots <strong>Arch Linux with Hyprland</strong> under your platform's own hypervisor, so you get root, systemd, pacman, a compositor and a browser, exactly as you would on metal. Install whatever you want and break whatever you want, because a replacement is a second away.</p>
-    <p>They are copy-on-write clones of a single base image, which is why a new one costs a second and a few megabytes instead of a full copy of the disk. Nothing you do inside one machine is visible from another.</p>
-    <p>Everything runs on loopback on your own hardware. There is no account to create and no hosted service in the middle, so nothing leaves your computer unless you send it somewhere yourself.</p>
+    <h2>What you get</h2>
+    <p>Each machine boots Arch Linux with Hyprland under your platform's hypervisor. You get root, systemd, pacman, a compositor, and a browser. Install what you need. If you break the machine, delete it and create another.</p>
+    <p>The engine clones every machine from one base image using copy-on-write. A new machine therefore costs about a second and a few megabytes rather than a 16 GB copy. Machines share nothing after creation.</p>
+    <p>The engine listens on loopback only. You do not create an account, and no hosted service sits in the middle. Your data stays on your computer unless you send it elsewhere.</p>
   </section>
 
   <section id="start">
     <h2>Start</h2>
-    <p class="lede">Two commands on a Mac, and one on Linux if you already have QEMU installed.</p>
+    <p class="lede">Two commands on macOS. One on Linux, if you already installed QEMU.</p>
 
     <div class="steps">
       <div class="step">
         <div>
-          <h3>Get a hypervisor</h3>
+          <h3>Install QEMU</h3>
 <pre><code>brew install qemu        <span class="d"># macOS, Apple Silicon</span>
 sudo pacman -S qemu-full <span class="d"># Linux, and check /dev/kvm exists</span></code></pre>
-          <p>Any QEMU build will do. On macOS it signs itself with the hypervisor entitlement during its own build, so there is no Developer ID to obtain and no special runtime to track down.</p>
+          <p>Any QEMU build works. QEMU applies the macOS hypervisor entitlement to itself when it builds, so you need no Developer ID and no separate runtime.</p>
         </div>
       </div>
 
       <div class="step">
         <div>
-          <h3>Run it</h3>
+          <h3>Start the engine</h3>
 <pre><code>npx hyperwake</code></pre>
-          <p>The first run downloads a guest image of about 1.1 GB, checking it as the bytes arrive, so give it a few minutes before you expect anything. After that it prints an address and a token, then stays in the foreground until you stop it.</p>
-          <p>If you would rather check first, <code>npx hyperwake doctor</code> looks at what your machine can actually do and tells you what is missing, rather than guessing.</p>
+          <p>The first run downloads a 1.1 GB guest image and verifies its checksums as the bytes arrive. Expect a few minutes. The engine then prints an address and a token, and stays in the foreground until you stop it.</p>
+          <p>To check your machine first, run <code>npx hyperwake doctor</code>. It tests each requirement and names whatever is missing.</p>
         </div>
       </div>
 
       <div class="step">
         <div>
-          <h3>Make a computer</h3>
+          <h3>Create a machine</h3>
 <pre><code><span class="d">export</span> API=http://127.0.0.1:4141/v1
 <span class="d">export</span> TOKEN=$(cat ~/.hyperwake/token)
 
@@ -324,20 +324,20 @@ curl -s -X POST $API/machines \
   -H <span class="a">"Authorization: Bearer $TOKEN"</span> \
   -H <span class="a">'content-type: application/json'</span> \
   -d <span class="a">'{"name": "scratch"}'</span></code></pre>
-          <p>You get 4 vCPU, 4 GB of memory and a 40 GB disk unless you ask for something else. The machine comes back as <code>booting</code> and reaches <code>ready</code> about seven seconds later, at which point you can start sending it work.</p>
+          <p>A machine gets 4 vCPU, 4 GB of memory, and a 40 GB disk by default. Set <code>vcpus</code>, <code>memory_mb</code>, or <code>disk_gb</code> to change that. The response returns <code>booting</code>. The machine reaches <code>ready</code> about seven seconds later.</p>
         </div>
       </div>
     </div>
 
     <div class="box">
-      <span class="lbl">Where everything lives</span>
-      <p>The engine keeps its token, its keys, the guest image and every machine disk in <code>~/.hyperwake</code>, and you can move all of that with <code>HYPERWAKE_HOME</code>. It deliberately sits outside the installed package, because <code>npx</code> installs into a cache that gets cleared without warning and a machine's disk needs to outlive the tool that created it.</p>
+      <span class="lbl">Where the engine stores things</span>
+      <p>The engine writes its token, keys, guest image, and machine disks to <code>~/.hyperwake</code>. Set <code>HYPERWAKE_HOME</code> to move them. That directory sits outside the installed package on purpose: <code>npx</code> clears its cache without warning, and a machine's disk must outlive the tool that created it.</p>
     </div>
   </section>
 
   <section id="drive">
-    <h2>Drive it</h2>
-    <p class="lede">Nine verbs, all on <code>POST /v1/machines/{id}/actions</code>, one per request.</p>
+    <h2>Control a machine</h2>
+    <p class="lede">Send one action per request to <code>POST /v1/machines/{id}/actions</code>. The engine accepts nine.</p>
 
     <div class="scroll">
       <table>
@@ -356,7 +356,7 @@ curl -s -X POST $API/machines \
       </table>
     </div>
 
-    <h3>Opening a terminal from outside the machine</h3>
+    <h3>Open a terminal and run a command</h3>
 <pre><code>curl -X POST $API/machines/$ID/actions -H <span class="a">"Authorization: Bearer $TOKEN"</span> \
   -d <span class="a">'{"action": "key", "key": "super-return"}'</span>
 
@@ -365,18 +365,18 @@ curl -X POST $API/machines/$ID/actions -H <span class="a">"Authorization: Bearer
 
 curl -X POST $API/machines/$ID/actions -H <span class="a">"Authorization: Bearer $TOKEN"</span> \
   -d <span class="a">'{"action": "key", "key": "enter"}'</span></code></pre>
-    <p>Those are Omarchy's own keybindings: <code>super-return</code> opens a terminal, <code>super-space</code> brings up the launcher, and <code>super-k</code> shows you every binding there is.</p>
+    <p>Those keys are Omarchy's own bindings. <code>super-return</code> opens a terminal, <code>super-space</code> opens the launcher, and <code>super-k</code> lists every binding.</p>
 
-    <h3>Watching it happen</h3>
+    <h3>Watch the screen</h3>
 <pre><code>curl -X POST $API/machines/$ID/desktop -H <span class="a">"Authorization: Bearer $TOKEN"</span>
 
 <span class="d">{"data": {"desktop_url": "http://127.0.0.1:4141/desktop#t=...", "expires_in": 60}}</span></code></pre>
-    <p>Open that URL in a browser and you are looking at the live desktop, with the mouse and keyboard working as you would expect. The ticket travels in the URL fragment, which browsers never send to a server, so it stays out of access logs and referrer headers. It works once and expires after sixty seconds, so ask for a new one whenever you need it.</p>
+    <p>Open that URL in a browser to see the live desktop. The mouse and keyboard work. The ticket travels in the URL fragment, which browsers never send to a server, so it stays out of access logs and referrer headers. Each ticket works once and expires after 60 seconds.</p>
   </section>
 
   <section id="api">
     <h2>API</h2>
-    <p class="lede">Everything under <code>/v1</code> takes <code>Authorization: Bearer &lt;token&gt;</code>. <code>GET /v1</code> lists itself, for an agent to read.</p>
+    <p class="lede">Send <code>Authorization: Bearer &lt;token&gt;</code> with every request under <code>/v1</code>. <code>GET /v1</code> returns the endpoint list, so an agent can discover the API itself.</p>
 
     <div class="scroll">
       <table>
@@ -411,8 +411,8 @@ curl -X POST $API/machines/$ID/actions -H <span class="a">"Authorization: Bearer
   </section>
 
   <section id="states">
-    <h2>Ready means ready</h2>
-    <p class="lede">There are four, and two of them are worth a word of explanation.</p>
+    <h2>Machine states</h2>
+    <p class="lede">A machine reports one of four states. Two of them need explanation.</p>
 
     <div class="scroll">
       <table>
@@ -426,64 +426,64 @@ curl -X POST $API/machines/$ID/actions -H <span class="a">"Authorization: Bearer
       </table>
     </div>
 
-    <p><strong>ready is not "the process started".</strong> QEMU can be running happily while the guest is still bringing up its network or its compositor. The engine waits for a heartbeat from <em>this</em> boot before it says ready, so the first command you send lands somewhere that can answer it.</p>
+    <p><code>ready</code> does not mean "the process started". QEMU can run while the guest still starts its network or its compositor. The engine waits for a heartbeat from the current boot before it reports <code>ready</code>. Your first command therefore reaches a machine that can answer it.</p>
 
-    <p><strong><code>unknown</code> is a real answer</strong>, and you will get it instead of a guess. A runtime that cannot see a machine has not told you that the machine stopped, and treating those two as the same thing is how a platform ends up losing track of something it is still running.</p>
+    <p><code>unknown</code> reports that the runtime cannot see the machine. The engine returns it instead of guessing. A runtime that cannot see a machine has not reported that the machine stopped, and a platform that treats those two answers as the same loses track of machines it still runs.</p>
 
     <div class="box">
-      <span class="lbl">The guest does not get a vote</span>
-      <p>Whoever uses a machine is root inside it, so anything it reports is a claim about itself, never a fact about the platform. The engine records what a guest says about its own capabilities and then decides readiness itself.</p>
+      <span class="lbl">The engine does not trust the guest</span>
+      <p>Whoever uses a machine has root inside it. The engine therefore treats everything a guest reports as a claim about itself rather than a fact about the platform. It records the capabilities a guest reports, then decides readiness on its own.</p>
     </div>
 
     <div class="box">
-      <span class="lbl">Nothing is forgotten while it still exists</span>
-      <p>When a delete cannot tear a machine down it returns 502 and leaves the machine registered, with the reason attached, so you can retry it. If it removed the record and moved on you would be left with a virtual machine consuming memory that nothing can name and nobody can stop.</p>
+      <span class="lbl">A failed delete keeps the record</span>
+      <p>A delete that cannot tear a machine down returns 502 and keeps the machine registered, with the reason attached, so you can retry. Dropping the record instead would leave a virtual machine consuming memory that you could no longer name or stop.</p>
     </div>
   </section>
 
   <section id="trouble">
-    <h2>Trouble</h2>
+    <h2>Troubleshooting</h2>
 
-    <h3>doctor says it is not ready</h3>
-    <p>It will tell you exactly what is missing. Usually the answer is <code>brew install qemu</code>, or on Linux a <code>/dev/kvm</code> that your user is allowed to open. If you are inside a cloud VM, that needs the provider to expose nested virtualisation, and plenty of them do not.</p>
+    <h3>doctor reports that the host is not ready</h3>
+    <p>Read the line it names. On macOS, run <code>brew install qemu</code>. On Linux, check that <code>/dev/kvm</code> exists and that your user can open it. Inside a cloud VM, your provider must expose nested virtualisation, and many do not.</p>
 
     <h3>A machine never reaches ready</h3>
 <pre><code>tail -40 ~/.hyperwake/runtime/machines/&lt;id&gt;/console.log</code></pre>
-    <p>If you see <code>HVF does not support GICv2 emulation</code>, the wrong interrupt controller was chosen for your QEMU. Set <code>HYPERWAKE_GIC=3</code> and create the machine again. QEMU's own errors land in <code>runtime.log</code>, next to the console log.</p>
+    <p><code>HVF does not support GICv2 emulation</code> means your QEMU needs a different interrupt controller. Set <code>HYPERWAKE_GIC=3</code> and create the machine again. QEMU writes its own errors to <code>runtime.log</code>, beside the console log.</p>
 
-    <h3>Screenshots come back scrambled</h3>
-    <p>That usually means the capture arrived while the compositor was mid-draw. Send an input event first, something harmless like <code>{"action": "key", "key": "super"}</code>, and capture again.</p>
+    <h3>Screenshots return scrambled frames</h3>
+    <p>The capture reached the compositor mid-draw. Send an input event first, such as <code>{"action": "key", "key": "super"}</code>, then capture again.</p>
 
-    <h3>The desktop URL sits on "connecting"</h3>
-    <p>Tickets work once and last sixty seconds, so the usual fix is to ask for another one. Worth knowing: changing only the <code>#fragment</code> of a URL does not reload the page, so pasting a fresh ticket over a spent one in the address bar will appear to do nothing at all. Open it in a new tab instead.</p>
+    <h3>The desktop URL stays on "connecting"</h3>
+    <p>Request a new ticket. Each one works once and lasts 60 seconds. Note that changing only the <code>#fragment</code> of a URL does not reload the page, so pasting a fresh ticket over a spent one in the address bar does nothing. Open the URL in a new tab.</p>
 
-    <h3>Creating or waking hits a limit</h3>
-    <p>The defaults allow two running machines and 8192 MB between them. You can raise either with <code>HYPERWAKE_MAX_RUNNING</code> and <code>HYPERWAKE_MAX_MEMORY_MB</code>, or simply stop one you are not using. Stopped machines only cost you disk space, so they do not count against either limit.</p>
+    <h3>Creating or starting a machine hits a limit</h3>
+    <p>The engine allows 2 running machines and 8192 MB between them. Raise either limit with <code>HYPERWAKE_MAX_RUNNING</code> or <code>HYPERWAKE_MAX_MEMORY_MB</code>, or stop a machine you are not using. Stopped machines consume disk only and count against neither limit.</p>
 
     <h3>A machine appears that you did not create</h3>
-    <p>When the engine starts it adopts anything the runtime is holding that it does not recognise, naming it <code>adopted-&lt;id&gt;</code>. That means a previous engine was killed before it managed to write the record. The machine is real and running, so delete it the usual way if you do not want it.</p>
+    <p>At startup the engine adopts any machine the runtime holds but the registry does not list, and names it <code>adopted-&lt;id&gt;</code>. A previous engine died before it wrote the record. The machine runs normally, so delete it the usual way.</p>
   </section>
 
   <section id="build">
-    <h2>Build your own image</h2>
-    <p class="lede">The downloaded image suits most people. Build your own if you want a different set of packages, or if you would rather not download one at all.</p>
+    <h2>Build your own guest image</h2>
+    <p class="lede">Most people use the downloaded image. Build your own to change the package set, or to avoid the download.</p>
 
     <div class="box hot">
-      <span class="lbl">This asks for more than running machines does</span>
-      <p>It needs <strong>Docker running</strong>, because it compiles the guest daemon and injects it into the root filesystem in a privileged container. On Apple Silicon it also needs the base Omarchy filesystem, which it takes from a <a href="https://github.com/omacom/try-omarchy">Try Omarchy</a> install in <code>/Applications</code>, verifying that app's signature and every artifact's checksum.</p>
-      <p>Neither of them is touched again once the image exists, and machines run under your own QEMU from then on.</p>
+      <span class="lbl">Building needs more than running does</span>
+      <p>The build needs Docker running. It compiles the guest daemon and injects it into the root filesystem inside a privileged container. On Apple Silicon it also reads the base Omarchy filesystem from a <a href="https://github.com/omacom/try-omarchy">Try Omarchy</a> install in <code>/Applications</code>, and verifies that app's signature and every artifact's checksum.</p>
+      <p>Once the image exists, the engine uses neither again. Machines run under your own QEMU.</p>
     </div>
 
 <pre><code>git clone https://github.com/obaid/hyperwake-core
 cd hyperwake-core && npm install
 python3 bin/native-prepare --output ~/.hyperwake</code></pre>
-    <p>That writes <code>~/.hyperwake/image</code>, which is exactly where the engine looks for it. If you pass a different <code>--output</code>, set <code>HYPERWAKE_HOME</code> to match. Existing images are never overwritten, so move the old directory aside if you want to rebuild.</p>
+    <p>The script writes <code>~/.hyperwake/image</code>, where the engine looks for it. If you pass a different <code>--output</code>, set <code>HYPERWAKE_HOME</code> to match. The script never overwrites an existing image, so move the old directory aside to rebuild.</p>
   </section>
 
   <footer>
-    <p><a href="https://github.com/obaid/hyperwake-core">Source</a> · <a href="https://www.npmjs.com/package/hyperwake">npm</a> · <a href="https://github.com/obaid/hyperwake-core/blob/main/LICENSE.md">FSL-1.1-ALv2</a></p>
-    <p>The source is public and you can read it, change it, and run it for anything you like, including inside a business. The one thing you may not do is package it up as a competing commercial product or service. Two years after each release, that version becomes Apache 2.0 and the restriction lifts entirely.</p>
-    <p>This is fair source rather than open source in the OSI sense, and it is worth saying so plainly rather than blurring the two.</p>
+    <p><a href="https://github.com/obaid/hyperwake-core">Source</a> · <a href="https://www.npmjs.com/package/hyperwake">npm</a> · <a href="https://github.com/obaid/hyperwake-core/blob/main/LICENSE.md">PolyForm Noncommercial 1.0.0</a></p>
+    <p>You may read, change, and run this software for any noncommercial purpose. That covers personal projects, research, teaching, and use by charities, schools, and government bodies. Commercial use requires a separate licence.</p>
+    <p>This licence is not open source. The source is published and you can read it, but the terms restrict who may use it.</p>
     <p>Omarchy and the bundled dependencies keep their own licences. Hyperwake is independent, and is not affiliated with or endorsed by Omarchy, DHH, 37signals, Basecamp, or the Omacom Foundation.</p>
   </footer>
 
