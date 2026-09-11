@@ -40,8 +40,13 @@ npx hyperwake doctor
 It reports what it found rather than what it assumes, and names anything that is
 missing.
 
-Docker is not required. It is useful for building guest images, but the machines
-themselves run under QEMU.
+You also need a guest image, and building one has heavier requirements than
+running machines does: Docker, and on Apple Silicon a copy of
+[Try Omarchy](https://github.com/omacom/try-omarchy) to take the base image
+from. That is a one time step. Once the image exists, nothing in the running
+path touches either of them.
+
+[Getting started](docs/getting-started.md) covers it.
 
 ## Your first computer
 
