@@ -1,0 +1,470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hyperwake</title>
+<meta name="description" content="Give an agent a real Linux computer, running on your own machine, and talk to it over HTTP.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🖥</text></svg>">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --bg:      #f5f7f8;
+    --panel:   #ffffff;
+    --sunk:    #e9eef0;
+    --ink:     #111a1d;
+    --ink-2:   #41525a;
+    --ink-3:   #6d8189;
+    --rule:    #d4dcdf;
+    --rule-2:  #e5ebed;
+    --accent:  #0c6f7a;
+    --accent-2:#d3ecee;
+    --warn:    #96453a;
+    --warn-bg: #f7e4e1;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:      #0c1214;
+      --panel:   #131d20;
+      --sunk:    #0a1012;
+      --ink:     #e6eef0;
+      --ink-2:   #a7b9bf;
+      --ink-3:   #72868d;
+      --rule:    #25343a;
+      --rule-2:  #1b272b;
+      --accent:  #5cc7d2;
+      --accent-2:#153a40;
+      --warn:    #e28d7f;
+      --warn-bg: #372020;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#0c1214; --panel:#131d20; --sunk:#0a1012; --ink:#e6eef0; --ink-2:#a7b9bf;
+    --ink-3:#72868d; --rule:#25343a; --rule-2:#1b272b; --accent:#5cc7d2;
+    --accent-2:#153a40; --warn:#e28d7f; --warn-bg:#372020;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 16px; line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell { max-width: 1120px; margin: 0 auto; padding: 0 1.5rem; }
+  .layout { display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: 3rem; align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; gap: 1.5rem; } }
+
+  nav.rail { position: sticky; top: 1.5rem; padding: 1.5rem 0; }
+  @media (max-width: 900px) {
+    nav.rail { position: static; border-bottom: 1px solid var(--rule); padding-bottom: 1rem; }
+    nav.rail ol { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
+  }
+  nav.rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+  nav.rail a {
+    display: block; padding: 0.28rem 0; color: var(--ink-3); text-decoration: none;
+    font-size: 0.855rem; border-left: 2px solid transparent; padding-left: 0.7rem;
+  }
+  @media (max-width: 900px) { nav.rail a { border-left: none; padding-left: 0; } }
+  nav.rail a:hover { color: var(--accent); }
+  nav.rail a.here { color: var(--ink); border-left-color: var(--accent); font-weight: 500; }
+  nav.rail .grp {
+    font-family: var(--mono); font-size: 0.67rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-3); padding: 1.1rem 0 0.35rem 0.7rem;
+  }
+  @media (max-width: 900px) { nav.rail .grp { display: none; } }
+
+  main { padding: 1.5rem 0 6rem; min-width: 0; }
+
+  h1, h2, h3 { line-height: 1.2; text-wrap: balance; margin: 0; font-weight: 600; }
+  h1 { font-size: 2.6rem; letter-spacing: -0.028em; font-weight: 700; }
+  h2 { font-size: 1.55rem; letter-spacing: -0.018em; margin-top: 3.25rem; scroll-margin-top: 1.5rem; }
+  h3 { font-size: 1.06rem; margin-top: 1.85rem; }
+  p, ul, ol { margin: 0.85rem 0 0; max-width: 68ch; }
+  li { margin-top: 0.3rem; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  .lede { font-size: 1.16rem; color: var(--ink-2); margin-top: 1rem; max-width: 62ch; }
+
+  code {
+    font-family: var(--mono); font-size: 0.87em;
+    background: var(--sunk); padding: 0.1em 0.35em; border-radius: 3px;
+  }
+  pre {
+    margin: 1rem 0 0; background: var(--panel); border: 1px solid var(--rule);
+    border-radius: 4px; padding: 0.95rem 1.1rem; overflow-x: auto;
+    font-family: var(--mono); font-size: 0.83rem; line-height: 1.6;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  pre .c { color: var(--ink-3); }
+  pre .k { color: var(--accent); }
+
+  .hero-cmd {
+    margin-top: 1.75rem; background: var(--panel); border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent); border-radius: 4px;
+    padding: 1rem 1.2rem; font-family: var(--mono); font-size: 1.02rem;
+    display: flex; align-items: center; gap: 0.6rem; max-width: 30rem;
+  }
+  .hero-cmd .p { color: var(--ink-3); }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(238px, 1fr)); gap: 0.9rem; margin-top: 1.1rem; }
+  .tile {
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 0.95rem 1.1rem;
+  }
+  .tile h4 { margin: 0 0 0.3rem; font-size: 0.94rem; font-weight: 600; }
+  .tile p { margin: 0; font-size: 0.87rem; color: var(--ink-2); max-width: none; }
+
+  .note {
+    margin-top: 1.2rem; border: 1px solid var(--rule); border-radius: 4px;
+    background: var(--panel); padding: 0.95rem 1.15rem; max-width: 68ch;
+  }
+  .note.warn { background: var(--warn-bg); border-color: var(--warn); }
+  .note .tag {
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.11em;
+    text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 0.35rem;
+  }
+  .note.warn .tag { color: var(--warn); }
+  .note p { margin: 0; font-size: 0.92rem; }
+  .note p + p { margin-top: 0.6rem; }
+
+  .tbl { overflow-x: auto; margin-top: 1.1rem; border: 1px solid var(--rule); border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; background: var(--panel); font-size: 0.88rem; }
+  th, td { text-align: left; padding: 0.58rem 0.9rem; border-bottom: 1px solid var(--rule-2); vertical-align: top; }
+  thead th {
+    font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.09em; text-transform: uppercase;
+    color: var(--ink-3); background: var(--sunk); border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.m, th.m { font-family: var(--mono); white-space: nowrap; }
+
+  .step { display: flex; gap: 1rem; margin-top: 2.4rem; }
+  .step .n {
+    flex: 0 0 auto; width: 1.7rem; height: 1.7rem; border-radius: 50%;
+    background: var(--accent-2); color: var(--accent); border: 1px solid var(--accent);
+    font-family: var(--mono); font-size: 0.8rem; font-weight: 600;
+    display: grid; place-items: center; margin-top: 0.15rem;
+  }
+  .step .body { min-width: 0; flex: 1; }
+  .step h3 { margin-top: 0; }
+
+  header.top { padding: 4rem 0 0; }
+  .kicker {
+    font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-3);
+  }
+
+  footer {
+    margin-top: 4.5rem; padding-top: 1.5rem; border-top: 1px solid var(--rule);
+    font-size: 0.85rem; color: var(--ink-3); max-width: 68ch;
+  }
+  footer a { color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="layout">
+
+    <nav class="rail" aria-label="Contents">
+      <ol>
+        <li><a href="#top" class="here">Hyperwake</a></li>
+        <li class="grp">Setup</li>
+        <li><a href="#requirements">Requirements</a></li>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#image">Guest image</a></li>
+        <li><a href="#run">Run the engine</a></li>
+        <li class="grp">Using it</li>
+        <li><a href="#first">Your first computer</a></li>
+        <li><a href="#actions">Actions</a></li>
+        <li><a href="#desktop">The desktop</a></li>
+        <li><a href="#cleanup">Stop and delete</a></li>
+        <li class="grp">Reference</li>
+        <li><a href="#api">API</a></li>
+        <li><a href="#status">Status</a></li>
+        <li><a href="#env">Environment</a></li>
+        <li><a href="#trouble">Troubleshooting</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <header class="top" id="top">
+        <div class="kicker">Open source · AGPL-3.0</div>
+        <h1>Hyperwake</h1>
+        <p class="lede">Give an agent a real Linux computer, running on your own machine, and talk to it over HTTP.</p>
+
+        <div class="hero-cmd"><span class="p">$</span> npx hyperwake</div>
+
+        <p>The engine starts and prints an address and a token. Hand those to your agent and it can create a computer, run shell commands, read and write files, take screenshots, move the mouse and type, open the desktop in a browser, and delete the whole thing when it is done.</p>
+
+        <p>Each computer is a full <a href="https://omarchy.org">Omarchy</a> desktop, Arch Linux with Hyprland, running in its own virtual machine. Creating one takes about a second and it becomes usable in under ten.</p>
+
+        <div class="grid-2">
+          <div class="tile"><h4>Real machines</h4><p>Hardware virtualisation through HVF or KVM, not a container. Root inside, systemd, package manager, the lot.</p></div>
+          <div class="tile"><h4>Fresh every time</h4><p>Copy-on-write clones of one base image. Nothing you do to one machine is visible to another.</p></div>
+          <div class="tile"><h4>Runs on your hardware</h4><p>Loopback only by default. No account, no hosted service, nothing leaves the machine.</p></div>
+        </div>
+      </header>
+
+      <h2 id="requirements">Requirements</h2>
+      <p>Node 20 or newer, and a hypervisor.</p>
+
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Platform</th><th>Needs</th></tr></thead>
+          <tbody>
+            <tr><td class="m">Apple Silicon Mac</td><td><code>brew install qemu</code>, Python 3.10+, an SSH client</td></tr>
+            <tr><td class="m">Linux x86_64</td><td><code>qemu-system-x86_64</code>, a usable <code>/dev/kvm</code>, Python 3.10+, SSH</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Check before you start. It reports what it found rather than what it assumes, and names anything missing.</p>
+      <pre><code>npx hyperwake doctor</code></pre>
+      <pre><code>  platform      darwin/arm64
+  python3       yes
+  ssh           yes
+  docker        yes <span class="c">(prepares images; does not run the guest)</span>
+  accelerator   hvf
+  qemu          /opt/homebrew/bin/qemu-system-aarch64
+  graphics      software (llvmpipe)
+
+  Ready.</code></pre>
+
+      <div class="note">
+        <span class="tag">On graphics</span>
+        <p><code>software (llvmpipe)</code> is normal. The guest gets a DRM render node from virtio-gpu and Hyprland renders on the CPU, which is enough for a working desktop. A QEMU built with virglrenderer reports <code>accelerated (virgl)</code> instead and is faster.</p>
+      </div>
+
+      <h2 id="install">Install</h2>
+      <p>Nothing to install for the engine itself. <code>npx</code> fetches it when you run it.</p>
+      <pre><code>npx hyperwake          <span class="c"># start</span>
+npx hyperwake doctor   <span class="c"># check this host</span></code></pre>
+      <p>Building a guest image is a separate step with heavier requirements, covered next. You need the repository for that, because it compiles the guest daemon from Go source.</p>
+
+      <h2 id="image">Build a guest image</h2>
+      <p>Every machine is cloned from one base image, and you build it once.</p>
+
+      <div class="note warn">
+        <span class="tag">This step needs more than running machines does</span>
+        <p><strong>Docker, running.</strong> The build compiles the guest daemon and injects it into the root filesystem inside a privileged container.</p>
+        <p><strong>On Apple Silicon, <a href="https://github.com/omacom/try-omarchy">Try Omarchy</a> installed in <code>/Applications</code>.</strong> That is where the base Omarchy filesystem comes from. The script verifies the app's code signature and the checksum of every artifact it takes.</p>
+        <p>Neither is used again afterwards. Machines run under your own QEMU.</p>
+      </div>
+
+      <pre><code>git clone https://github.com/obaid/hyperwake-core
+cd hyperwake-core
+npm install
+python3 bin/native-prepare --output ~/.hyperwake</code></pre>
+
+      <p>That writes <code>~/.hyperwake/image</code>, which is exactly where the engine looks. Pass a different <code>--output</code> only if you also set <code>HYPERWAKE_HOME</code> to match.</p>
+      <p>It takes several minutes and produces a 16 GB sparse disk. Existing images are never overwritten. To rebuild, move the old directory aside first.</p>
+
+      <h2 id="run">Run the engine</h2>
+      <pre><code>npx hyperwake</code></pre>
+      <p>It prints an address, a token and the endpoint list, then stays in the foreground. Leave it running and open a second terminal.</p>
+      <pre><code>export API=http://127.0.0.1:4141/v1
+export TOKEN=$(cat ~/.hyperwake/token)</code></pre>
+      <p>The engine binds to loopback only. Nothing outside your machine can reach it.</p>
+
+      <h2 id="first">Your first computer</h2>
+
+      <div class="step">
+        <div class="n">1</div>
+        <div class="body">
+          <h3>Create it</h3>
+          <pre><code>curl -s -X POST $API/machines \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"name": "scratch"}'</code></pre>
+          <p>You get back a machine in <code>booting</code>. Defaults are 4 vCPU, 4 GB of memory and a 40 GB disk.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="n">2</div>
+        <div class="body">
+          <h3>Wait for ready</h3>
+          <pre><code>curl -s $API/machines/$ID -H "Authorization: Bearer $TOKEN"</code></pre>
+          <p>Usually six to ten seconds. <code>ready</code> means the guest has reported in for this boot and its shell works, not merely that a process started.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="n">3</div>
+        <div class="body">
+          <h3>Run something on it</h3>
+          <pre><code>curl -s -X POST $API/machines/$ID/actions \
+  -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"action": "exec", "command": "grep PRETTY /etc/os-release"}'</code></pre>
+          <pre><code>{"data": {"exit_code": 0,
+          "stdout": "PRETTY_NAME=\"Arch Linux ARM\"\n",
+          "stderr": "", "timed_out": false, "truncated": false}}</code></pre>
+        </div>
+      </div>
+
+      <h2 id="actions">Actions</h2>
+      <p>Nine verbs, all on <code>POST /v1/machines/{id}/actions</code>, one per request.</p>
+
+      <div class="tbl">
+        <table>
+          <thead><tr><th class="m">Action</th><th>Body</th></tr></thead>
+          <tbody>
+            <tr><td class="m">exec</td><td class="m">{"command": "ls ~", "timeout": 30}</td></tr>
+            <tr><td class="m">read_file</td><td class="m">{"path": "~/notes.md"}</td></tr>
+            <tr><td class="m">write_file</td><td class="m">{"path": "~/notes.md", "content": "hello\n"}</td></tr>
+            <tr><td class="m">screenshot</td><td class="m">{}</td></tr>
+            <tr><td class="m">click</td><td class="m">{"x": 640, "y": 400, "button": 1}</td></tr>
+            <tr><td class="m">move</td><td class="m">{"x": 640, "y": 400}</td></tr>
+            <tr><td class="m">scroll</td><td class="m">{"direction": "down", "amount": 3}</td></tr>
+            <tr><td class="m">type</td><td class="m">{"text": "hello world"}</td></tr>
+            <tr><td class="m">key</td><td class="m">{"key": "super-return"}</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><code>exec</code>, <code>read_file</code> and <code>write_file</code> travel over SSH. The rest go over the guest's VNC socket. Either way the connection details come from the runtime, never from the request: a caller says what to do, never where.</p>
+      <p>Reads return <code>content_base64</code>, because a file is bytes and the trailing newline is the byte a file API most often loses. Files over 1 MiB are refused; use <code>exec</code> to select a smaller portion.</p>
+      <p><code>key</code> takes one key or a combination joined with <code>-</code>. In Omarchy, <code>super-return</code> opens a terminal, <code>super-space</code> the launcher, <code>super-k</code> the keybinding list.</p>
+
+      <h2 id="desktop">The desktop</h2>
+      <pre><code>curl -s -X POST $API/machines/$ID/desktop -H "Authorization: Bearer $TOKEN"</code></pre>
+      <pre><code>{"data": {"desktop_url": "http://127.0.0.1:4141/desktop#t=...", "expires_in": 60}}</code></pre>
+      <p>Open that URL in a browser. The desktop is live and interactive, mouse and keyboard included.</p>
+      <p>The ticket sits in the URL fragment, which browsers never send to a server, so it stays out of access logs and <code>Referer</code> headers. It works once and expires after sixty seconds. Ask for a new URL whenever you need one.</p>
+
+      <div class="note">
+        <span class="tag">Worth knowing</span>
+        <p>Changing only the <code>#fragment</code> of a URL does not reload a page, so pasting a fresh ticket over a spent one in the address bar will appear to do nothing. Open it in a new tab instead.</p>
+      </div>
+
+      <h2 id="cleanup">Stop and delete</h2>
+      <pre><code>curl -s -X POST $API/machines/$ID/stop -H "Authorization: Bearer $TOKEN"
+curl -s -X DELETE $API/machines/$ID -H "Authorization: Bearer $TOKEN"</code></pre>
+      <p><code>DELETE</code> stops the machine first if it is still running, then destroys it and its disk. If it cannot tear the machine down it returns 502 and leaves the machine registered so you can retry. A delete that quietly forgets a running machine would leave you with a virtual machine nobody can name.</p>
+
+      <h2 id="api">API</h2>
+      <p>Every endpoint under <code>/v1</code> needs <code>Authorization: Bearer &lt;token&gt;</code>. <code>GET /health</code> does not, and <code>GET /desktop</code> carries its own single-use ticket instead.</p>
+
+      <div class="tbl">
+        <table>
+          <thead><tr><th class="m">Endpoint</th><th>Does</th></tr></thead>
+          <tbody>
+            <tr><td class="m">GET /v1</td><td>endpoint list, and what this host can do</td></tr>
+            <tr><td class="m">POST /v1/machines</td><td>create a computer and start it</td></tr>
+            <tr><td class="m">GET /v1/machines</td><td>list them</td></tr>
+            <tr><td class="m">GET /v1/machines/{id}</td><td>describe one</td></tr>
+            <tr><td class="m">POST /v1/machines/{id}/start</td><td>start a stopped computer</td></tr>
+            <tr><td class="m">POST /v1/machines/{id}/stop</td><td>shut it down, <code>{"force": true}</code> cuts power</td></tr>
+            <tr><td class="m">POST /v1/machines/{id}/actions</td><td>do something inside it</td></tr>
+            <tr><td class="m">POST /v1/machines/{id}/desktop</td><td>a browser URL for the screen</td></tr>
+            <tr><td class="m">DELETE /v1/machines/{id}</td><td>destroy it and its disk</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Errors</h3>
+      <div class="tbl">
+        <table>
+          <thead><tr><th class="m">Status</th><th>Means</th></tr></thead>
+          <tbody>
+            <tr><td class="m">400</td><td>malformed request, or a bound exceeded</td></tr>
+            <tr><td class="m">401</td><td>missing or wrong token</td></tr>
+            <tr><td class="m">404</td><td>no such machine</td></tr>
+            <tr><td class="m">409</td><td>the machine is not in a state that allows this</td></tr>
+            <tr><td class="m">502</td><td>teardown failed; the machine is still registered</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="status">Status</h2>
+      <p><code>status</code> is the engine's conclusion. <code>runtime_status</code> is what QEMU says. They are reported separately because they answer different questions.</p>
+
+      <div class="tbl">
+        <table>
+          <thead><tr><th class="m">Status</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td class="m">booting</td><td>QEMU is running, the guest has not reported in for this boot</td></tr>
+            <tr><td class="m">ready</td><td>the guest has reported in and its shell works</td></tr>
+            <tr><td class="m">stopped</td><td>the machine is off, its disk intact</td></tr>
+            <tr><td class="m">unknown</td><td>the runtime cannot see the machine</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong><code>unknown</code> is a real answer</strong>, and the engine will give it to you rather than guessing. A runtime that cannot see a machine has not told you the machine stopped. Collapsing those two is how a platform loses track of something it is still running.</p>
+      <p><strong>The guest is not trusted.</strong> Whoever uses a machine is root inside it, so anything it reports is a claim about itself rather than a fact about the platform. The <code>capabilities</code> field is recorded as a claim; readiness is the engine's conclusion.</p>
+
+      <h2 id="env">Environment</h2>
+      <div class="tbl">
+        <table>
+          <thead><tr><th class="m">Variable</th><th>Default</th><th>Does</th></tr></thead>
+          <tbody>
+            <tr><td class="m">HYPERWAKE_HOME</td><td class="m">~/.hyperwake</td><td>state directory: token, keys, images, machine disks</td></tr>
+            <tr><td class="m">HYPERWAKE_PORT</td><td class="m">4141</td><td>listen port</td></tr>
+            <tr><td class="m">HYPERWAKE_QEMU</td><td class="m">found on PATH</td><td>a specific QEMU binary</td></tr>
+            <tr><td class="m">HYPERWAKE_MAX_RUNNING</td><td class="m">2</td><td>how many machines may run at once</td></tr>
+            <tr><td class="m">HYPERWAKE_MAX_MEMORY_MB</td><td class="m">8192</td><td>total memory machines may reserve</td></tr>
+            <tr><td class="m">HYPERWAKE_GIC</td><td class="m">3</td><td>ARM interrupt controller version</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="trouble">Troubleshooting</h2>
+
+      <h3>doctor says it is not ready</h3>
+      <p>It names what is missing. On a Mac, <code>brew install qemu</code>. On Linux, install <code>qemu-system-x86_64</code> and make sure <code>/dev/kvm</code> exists and your user can open it. Inside a cloud VM that usually means the provider has to expose nested virtualisation, which many do not.</p>
+
+      <h3>Address already in use</h3>
+      <p>Something is already on 4141, usually an engine you forgot about. Find it with <code>lsof -nP -iTCP:4141 -sTCP:LISTEN</code>, or start this one elsewhere with <code>--port=4242</code>.</p>
+
+      <h3>A machine never reaches ready</h3>
+      <pre><code>tail -40 ~/.hyperwake/runtime/machines/&lt;id&gt;/console.log</code></pre>
+      <p><code>HVF does not support GICv2 emulation</code> means the wrong interrupt controller. Set <code>HYPERWAKE_GIC=3</code> and create the machine again. QEMU's own errors land in <code>runtime.log</code> beside the console log.</p>
+
+      <h3>Screenshots come back garbled</h3>
+      <p>Partial frames usually mean the capture raced the compositor. Send an input event first, such as <code>{"action": "key", "key": "super"}</code>, then capture again.</p>
+
+      <h3>Creating or waking fails with a limit</h3>
+      <p>Defaults are two running machines and 8192 MB reserved. Raise them with <code>HYPERWAKE_MAX_RUNNING</code> and <code>HYPERWAKE_MAX_MEMORY_MB</code>, or stop one you are not using. Stopped machines cost disk, not memory.</p>
+
+      <h3>A machine appears that you did not create</h3>
+      <p>On startup the engine adopts anything the runtime is holding that it does not recognise, naming it <code>adopted-&lt;id&gt;</code>. That means a previous engine was killed hard enough that it never wrote the record. The machine is real; delete it normally.</p>
+
+      <footer>
+        <p><a href="https://github.com/obaid/hyperwake-core">Source on GitHub</a> · <a href="https://www.npmjs.com/package/hyperwake">hyperwake on npm</a> · AGPL-3.0-or-later</p>
+        <p>Running an unmodified copy carries no obligation, including commercially. Running a modified version as a network service means offering your users the source of your changes. Omarchy and the bundled dependencies keep their own licences. Hyperwake is independent and is not affiliated with or endorsed by Omarchy, DHH, 37signals, Basecamp, or the Omacom Foundation.</p>
+      </footer>
+    </main>
+  </div>
+</div>
+
+<script>
+  const links = [...document.querySelectorAll('nav.rail a')];
+  const targets = links
+    .map((a) => document.querySelector(a.getAttribute('href')))
+    .filter(Boolean);
+
+  const mark = (id) => {
+    for (const a of links) a.classList.toggle('here', a.getAttribute('href') === '#' + id);
+  };
+
+  if ('IntersectionObserver' in window) {
+    const seen = new Set();
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) seen.add(e.target.id); else seen.delete(e.target.id);
+      }
+      const first = targets.find((t) => seen.has(t.id));
+      if (first) mark(first.id);
+    }, { rootMargin: '-10% 0px -70% 0px' });
+    for (const t of targets) io.observe(t);
+  }
+</script>
+</body>
+</html>
