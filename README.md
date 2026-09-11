@@ -1,10 +1,11 @@
 # Hyperwake
 
-**Throwaway Omarchy computers for your agents.**
+**Instant computers powered by Omarchy that your AI agents can see, control,
+and operate.**
 
-A real Arch and Hyprland desktop in its own virtual machine, on hardware you
-already own. One second to make one. Seven to use it. Delete it and make
-another.
+A full Linux desktop, driven entirely through an API. Each machine runs Arch
+Linux and Hyprland in its own virtual machine, on hardware you already own. One
+second to make one. Seven to use it. Delete it and make another.
 
 ```sh
 npx hyperwake
