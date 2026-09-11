@@ -298,6 +298,11 @@ a tool rather than a demo.
 
 ## Milestones
 
+**Sequencing.** [ADR-MCP-001](ADR-MCP-001-mcp-server.md) goes first. An MCP
+server is a few hundred lines against a whole application, and it tests the tool
+names, descriptions and argument shapes against real models before a UI is built
+around them. This app inherits whatever that teaches.
+
 **M0 — packaging spike.** `next build`, `npm pack`, `npx ./the-tarball.tgz`,
 browser opens, health check passes. No features. This is the only unknown in the
 plan that could change the framework, so it goes first.
