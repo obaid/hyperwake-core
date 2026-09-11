@@ -1,57 +1,98 @@
-# Developing Hyperwake
-
-Customers should start with the quickstart. This page is for contributors
-changing the service itself.
-
-## Development environment
-
-Use PHP 8.4.1+, Composer, Node 22.19+ and Go 1.23+. The current local workspace
-uses Laravel Herd at `http://hyperwake.test`; Postgres and Redis run in Docker.
-The developer services in `docker/compose.yml` are separate from the customer
-`compose.yaml` deployment.
+# Development
 
 ```sh
-composer install
-npm ci
-cp .env.example .env
-php artisan key:generate
-docker compose -f docker/compose.yml up -d
-php artisan migrate --seed
-npm run build
-bin/dev
+git clone https://github.com/obaid/hyperwake-core
+cd hyperwake-core
+npm install
 ```
 
-Only copy `.env.example` on a fresh checkout; do not overwrite an existing
-configuration. The development seeder creates development accounts and is
-refused in self-hosted mode. Never run `migrate:fresh` or `db:wipe` on a shared
-database.
+## Running from a checkout
 
-The Debian/i3 guest at `image/docker` is a development fixture. It can exercise
-the lifecycle and automation transports on a laptop. It is not Omarchy and does
-not satisfy the release acceptance test. The customer runtime is `image/kvm`,
-which builds on `image/omarchy` and needs a Linux/KVM host to run.
+```sh
+node bin/hyperwake.js doctor
+node bin/hyperwake.js start
+```
 
-## Code map
+Use a separate state directory so you do not disturb an installed engine:
 
-| Area | Location |
+```sh
+HYPERWAKE_HOME=/tmp/hw-dev HYPERWAKE_PORT=4242 node bin/hyperwake.js start
+```
+
+## Tests
+
+```sh
+npm test
+```
+
+Ten unit tests covering status resolution, request validation, the guest
+protocol and the registry. They run in well under a second and need no QEMU.
+
+The end to end test needs a running engine and creates a real machine:
+
+```sh
+HYPERWAKE_HOME=/tmp/hw-dev HYPERWAKE_BASE=http://127.0.0.1:4242 test/acceptance.sh
+```
+
+It creates a machine, waits for ready, runs a command, round-trips a file, mints
+a desktop ticket, checks the ticket cannot be replayed, then stops, deletes, and
+verifies that machine is gone from both the registry and the disk. Sixteen
+assertions, about forty seconds.
+
+There is also a [Postman collection](../postman/) covering the same path, which
+runs under newman.
+
+## Layout
+
+| | |
 |---|---|
-| API and application | `app`, `routes` |
-| Machine lifecycle and compute drivers | `app/Domain`, `app/Infrastructure/Compute` |
-| Website and dashboard | `resources/js`, `resources/css` |
-| Customer CLI and setup | `bin/hyperwake`, `bin/setup` |
-| Automation transport | `runtime/automation.py` |
-| Desktop gateway | `gateway/desktop` |
-| Guest heartbeat and identity | `guest/hyperwake-guest` |
-| Customer deployment | `compose.yaml`, `docker/self-host`, `image/kvm` |
+| `bin/hyperwake.js` | CLI entry point: `start` and `doctor` |
+| `src/preflight.js` | what this host can do, measured |
+| `src/server.js` | HTTP routing and request handling |
+| `src/api.js` | validation and response shaping |
+| `src/runtime.js` | supervises the Python QEMU runner and talks to it |
+| `src/guest.js` | the control plane half of the guest protocol |
+| `src/automation.js` | runs one automation verb against a guest |
+| `src/desktop.js` | desktop tickets, the noVNC page, the websocket proxy |
+| `src/state.js` | the machine registry |
+| `src/keys.js` | the engine's SSH key |
+| `src/python.js` | the private virtualenv for screen capture |
+| `runtime/` | the Python QEMU supervisor and automation transport |
+| `guest/` | the Go daemon that runs inside a machine |
+| `image/` | guest image builds |
 
-Public docs are Markdown files rendered by the docs controller. Add pages to its
-explicit allowlist; do not accept arbitrary file paths from a URL. Every new
-machine endpoint needs ownership and token-ability tests.
+The engine supervises the Python runner rather than reimplementing QEMU
+management in JavaScript. That runner is the part that has actually booted
+desktops; rewriting working supervision to save a process would trade
+correctness for tidiness.
 
-## Verify
+## Building the guest daemon
 
-Follow `CONTRIBUTING.md`. Use `bin/acceptance` against a configured test server
-for the real machine workflow. It leaves its test computer stopped with its disk
-retained, for review. Its timing excludes initial deployment and downloads.
-Inspect the screenshot and run the natural-language prompt in each agent before
-claiming end-to-end compatibility.
+```sh
+make -C guest/hyperwake-guest
+```
+
+Binaries are not committed. A repository that ships its own build output invites
+a stale binary running against a newer control plane, which strands every
+machine at boot.
+
+## Building images
+
+```sh
+python3 bin/build-images        # container images and the guest daemon
+python3 bin/native-prepare      # a guest image for the native QEMU runtime
+```
+
+Both need Docker. Docker builds images; it does not run the machines.
+
+## Conventions
+
+Errors carry a status that means something and a message a person can act on.
+409 means the machine is not in a state that allows this; 502 means teardown
+failed and the machine is still registered.
+
+New state a machine can report is a claim, not a fact. Record it, decide
+separately.
+
+Anything that can leave a machine running must not remove the record that names
+it.

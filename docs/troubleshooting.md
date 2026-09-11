@@ -1,62 +1,108 @@
 # Troubleshooting
 
-## Setup says KVM is unavailable
+## `hyperwake doctor` says it is not ready
 
-For the Linux runtime, run setup on a Linux x86_64 host. Mac and Windows use
-the [native runtime](platforms.md), which does not need Docker to expose KVM. Check
-`ls -l /dev/kvm`. Enable CPU virtualization in firmware, or choose a server
-provider that exposes it. Docker Desktop alone does not satisfy this requirement.
-Do not substitute the Debian development image and call it Omarchy.
+It names what is missing. The usual answers:
 
-## First build takes longer than five minutes
+**No QEMU with the hvf accelerator.** On a Mac, `brew install qemu`. If you have
+a QEMU somewhere else, point at it with `HYPERWAKE_QEMU=/path/to/qemu-system-aarch64`.
 
-This checkout builds the OS and service from source. The five-minute customer
-experience needs prebuilt release artifacts and a measured clean install; those
-are still release gates. Watch `.hyperwake` build logs when testing locally, or
-the live Docker build output from `bin/setup --build`.
+**No `/dev/kvm`** on Linux. Either virtualisation is off in firmware, or you are
+inside a VM whose host does not expose nested virtualisation. Many cloud
+instances do not; bare metal always does.
 
-## API connection fails
+**No python3 or ssh.** Both are used by the automation transport. Install them
+through your package manager.
 
-Run `hyperwake doctor`. Check the endpoint ends in `/api/v1`, your domain and
-certificate, and that the token belongs to this deployment. The client refuses
-unencrypted remote HTTP and redirects. For a private server use the SSH tunnel
-shown in the quickstart, with the localhost endpoint.
+## The engine will not start
 
-## Computer remains provisioning or booting
+**`EADDRINUSE: address already in use 127.0.0.1:4141`** means something is
+already listening, usually an engine you forgot about. Find it with
+`lsof -nP -iTCP:4141 -sTCP:LISTEN` and stop it, or start this one on another port
+with `--port=4242`.
 
-Check `hyperwake show COMPUTER_ID`, then the worker logs:
+**`Runtime did not become healthy`** means the Python supervisor failed to come
+up. Its errors are printed with a `[runtime]` prefix above that line. The most
+common cause is a Python that cannot import its dependencies; delete
+`~/.hyperwake/python` and start again to rebuild the virtualenv.
+
+## A machine never reaches ready
+
+Look at its console log:
 
 ```sh
-docker compose --env-file .hyperwake/compose.env logs --tail=100 worker
+tail -40 ~/.hyperwake/runtime/machines/<id>/console.log
 ```
 
-The queue worker and scheduler are required. Check host capacity and available
-disk space. A boot timeout requires inspecting the actual guest display and
-SSH services; a running container alone does not mean the desktop is ready.
+**`HVF does not support GICv2 emulation`** means the engine chose the wrong
+interrupt controller for your QEMU. Stock QEMU on HVF needs GICv3. Set
+`HYPERWAKE_GIC=3` and create the machine again.
 
-## Shell works but screenshot fails
+**`QEMU exited during launch`** is reported with the machine's `runtime.log`
+beside the console log. That file holds QEMU's own error.
 
-The desktop and its VNC service may still be starting or may have failed.
-Inspect the computer's status and gateway logs. A black screen is a failure to
-investigate, not evidence of a working Omarchy computer. The desktop API supports
-only known host-derived targets, not arbitrary host/port requests.
+If the machine stays in `booting` with no errors, the guest daemon is not
+reporting in. Check that it can reach the engine: the guest dials `10.0.2.2` on
+the engine's port, which QEMU maps back to your loopback interface.
 
-## SSH host key changed
+## Screenshots come back garbled
 
-The automation transport pins guest keys on first use under a computer-specific
-alias. A key-change failure is intentional. Verify whether the guest was rebuilt
-or compromised before removing its old entry from the application's
-`storage/app/automation-known-hosts`. Do not disable host-key checking globally.
+Partial or scrambled frames usually mean the capture is racing the compositor
+rather than anything being broken. Send an input event first, such as
+`{"action": "key", "key": "super"}`, then capture again.
 
-## File is on the wrong computer
+If every frame is wrong rather than the first one, check that the guest's VNC
+server is running:
 
-Quote guest paths: `hyperwake read COMPUTER_ID '~/research.md'`. Unquoted `~`
-is expanded by your local shell before Hyperwake receives it. An `exec` command
-must also be quoted so local shell expansion cannot happen first.
+```sh
+curl -s -X POST $API/machines/$ID/actions -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"action": "exec", "command": "pgrep -a wayvnc; ss -ltn | grep 5900"}'
+```
 
-## Hosted-access requests
+## The desktop URL shows "connecting" forever
 
-The landing form saves requests in the deployment's `hosted_requests` table.
-It sends no email and starts no subscription. The operator can inspect requests
-using its database administration tools. Before exposing this form publicly,
-set a retention policy and a contact route for deletion requests.
+The ticket works once and expires after sixty seconds. If you reloaded the page,
+opened it twice, or waited too long, ask for a new URL.
+
+Changing only the `#fragment` of a URL does not reload a page, so pasting a fresh
+ticket over an old one in the address bar will appear to do nothing. Open it in a
+new tab, or reload after changing it.
+
+## Creating or waking fails with a limit
+
+The engine refuses to start more machines than it has room for. Defaults are two
+running machines and 8192 MB of reserved memory. Raise them with
+`HYPERWAKE_MAX_RUNNING` and `HYPERWAKE_MAX_MEMORY_MB`, or stop a machine you are
+not using.
+
+Stopped machines cost disk, not memory, and do not count against either limit.
+
+## Delete returns 502
+
+The engine could not tear the machine down, so it left it registered rather than
+forgetting a virtual machine that may still be running. The response says why.
+Retry the delete; if it keeps failing, look for the QEMU process yourself and
+check `~/.hyperwake/runtime/machines/<id>/` for what is left behind.
+
+## A machine appears that you did not create
+
+On startup the engine adopts anything the runtime is holding that the registry
+does not know about, and names it `adopted-<id prefix>`. That means a previous
+engine was killed hard enough that it never wrote the record. The machine is
+real and running; delete it normally if you do not want it.
+
+## Everything is slow
+
+Check whether graphics are accelerated:
+
+```sh
+npx hyperwake doctor
+```
+
+`software (llvmpipe)` means the guest renders on the CPU. That works, but a
+desktop doing a lot of compositing will feel it. A QEMU built with
+virglrenderer reports `accelerated (virgl)` instead.
+
+Also worth checking: how many machines are running, and whether the host has
+memory left. Each running machine reserves its full `memory_mb`.

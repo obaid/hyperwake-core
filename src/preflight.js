@@ -64,17 +64,13 @@ export function inspectHost() {
     else { report.qemu = override; report.accelerator = wanted; }
   } else if (system === 'darwin' && cpu === 'arm64') {
     // Any QEMU will do. It signs itself with the com.apple.security.hypervisor
-    // entitlement at build time (ad-hoc, `codesign -s -`), so HVF needs no
-    // Apple Developer ID and no bundled runtime. Homebrew's build works.
-    //
-    // Try Omarchy's QEMU is preferred only when nothing else is present: it
-    // carries virglrenderer for accelerated graphics, at the cost of being a
-    // third-party application the operator must install.
+    // entitlement during its own build (ad-hoc, `codesign -s -`), so the
+    // Hypervisor framework needs no Apple Developer ID and no bundled runtime.
+    // Point HYPERWAKE_QEMU at a different build to use one.
     const candidates = [
       'qemu-system-aarch64',
       '/opt/homebrew/bin/qemu-system-aarch64',
       '/usr/local/bin/qemu-system-aarch64',
-      '/Applications/Try Omarchy.app/Contents/Resources/runtime/bin/Try Omarchy',
     ];
     const found = candidates.find((path) => qemuAccelerators(path).includes('hvf'));
     if (found) {
