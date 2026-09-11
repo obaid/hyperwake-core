@@ -45,7 +45,7 @@ function explainMissingImage(host) {
   console.log(dim('    git clone https://github.com/obaid/hyperwake-core'));
   console.log(dim('    cd hyperwake-core && npm install'));
   console.log(dim(`    python3 bin/native-prepare --output ${home}`));
-  console.log(`\n  ${dim('https://obaid.github.io/hyperwake-core/#image')}\n`);
+  console.log(`\n  ${dim('https://hyperwake.ai/#image')}\n`);
 }
 
 if (command === 'doctor') {
@@ -90,7 +90,7 @@ if (!host.image) {
       explainMissingImage(host);
     } else {
       console.log(`\n${red('Could not fetch the guest image.')} ${error.message}\n`);
-      console.log(`  Retry, or build one yourself: ${dim('https://obaid.github.io/hyperwake-core/#image')}\n`);
+      console.log(`  Retry, or build one yourself: ${dim('https://hyperwake.ai/#image')}\n`);
     }
     process.exit(1);
   }

@@ -115,7 +115,7 @@ export function inspectHost() {
   report.hostReady = Boolean(report.qemu) && report.python && report.ssh && !report.reason;
   report.ready = report.hostReady && report.image;
   if (report.hostReady && !report.image) {
-    report.reason = `No guest image at ${report.imagePath}. Build one: see https://obaid.github.io/hyperwake-core/#image`;
+    report.reason = `No guest image at ${report.imagePath}. Build one: see https://hyperwake.ai/#image`;
   }
   return report;
 }

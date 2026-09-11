@@ -116,6 +116,9 @@ assertions.
 
 ## Documentation
 
+The full docs are at **[hyperwake.ai](https://hyperwake.ai)**. The same pages live
+in this repository:
+
 - [Getting started](docs/getting-started.md), from install to a working computer
 - [API reference](docs/api.md), every endpoint and action
 - [Concepts](docs/concepts.md), what a machine is and what its states mean
