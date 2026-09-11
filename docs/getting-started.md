@@ -38,47 +38,16 @@ node from virtio-gpu and Hyprland renders on the CPU. If your QEMU was built
 with virglrenderer the line reads `accelerated (virgl)` instead and the desktop
 is faster.
 
-## 2. Build a guest image
-
-Every machine is cloned from one base image, and you build it once.
-
-This step needs more than running machines does. It needs **Docker running**,
-because it compiles the guest daemon and injects it into the root filesystem in
-a privileged container. On Apple Silicon it also needs
-**[Try Omarchy](https://github.com/omacom/try-omarchy) installed in
-`/Applications`**, which is where the base Omarchy filesystem comes from. The
-script verifies that app's code signature and the checksum of every artifact it
-takes.
-
-Neither is used again afterwards. Machines run under your own QEMU.
-
-Image preparation lives in the repository rather than the npm package, because
-it builds the guest daemon from Go source:
-
-```sh
-git clone https://github.com/obaid/hyperwake-core
-cd hyperwake-core
-npm install
-python3 bin/native-prepare --output ~/.hyperwake
-```
-
-That writes `~/.hyperwake/image`, which is exactly where the engine looks. Pass
-a different `--output` only if you also set `HYPERWAKE_HOME` to match.
-
-It takes several minutes and produces a 16 GB sparse disk. Existing images are
-never overwritten; to rebuild, move the old directory aside first.
-
-## 3. Start the engine
+## 2. Start the engine
 
 ```sh
 npx hyperwake
 ```
 
-Or from the checkout you just made:
-
-```sh
-node bin/hyperwake.js start
-```
+The first run downloads a guest image, verifies it and puts it in
+`~/.hyperwake/image`. It is about 1.5 GB and takes a few minutes on a decent
+connection. Every machine you create afterwards is a copy-on-write clone of it,
+which is why creating one takes about a second.
 
 It prints an address, a token, and the endpoint list, then stays in the
 foreground. Leave it running and open a second terminal.
@@ -96,7 +65,7 @@ export TOKEN=$(cat ~/.hyperwake/token)
 
 The engine binds to loopback only. Nothing outside your machine can reach it.
 
-## 4. Create a computer
+## 3. Create a computer
 
 ```sh
 curl -s -X POST $API/machines \
@@ -114,7 +83,7 @@ Save the id:
 ID=<the id from that response>
 ```
 
-## 5. Wait for it to be ready
+## 4. Wait for it to be ready
 
 ```sh
 curl -s $API/machines/$ID -H "Authorization: Bearer $TOKEN"
@@ -125,7 +94,7 @@ guest daemon has reported in for this boot and its shell works. A machine whose
 QEMU process is running but whose guest has not checked in is still `booting`,
 because a process that has started is not the same as a computer you can use.
 
-## 6. Run something on it
+## 5. Run something on it
 
 ```sh
 curl -s -X POST $API/machines/$ID/actions \
@@ -149,7 +118,7 @@ Commands run over SSH as the `dev` user, who has passwordless sudo. They are
 capped at 120 seconds; for anything longer, start it in the background and poll
 for the result yourself.
 
-## 7. Write and read a file
+## 6. Write and read a file
 
 ```sh
 curl -s -X POST $API/machines/$ID/actions \
@@ -164,7 +133,7 @@ curl -s -X POST $API/machines/$ID/actions \
 Reads come back as `content_base64`, because a file is bytes and the trailing
 newline is the byte a file API most often loses.
 
-## 8. Look at the screen
+## 7. Look at the screen
 
 ```sh
 curl -s -X POST $API/machines/$ID/desktop -H "Authorization: Bearer $TOKEN"
@@ -196,7 +165,7 @@ curl -s -X POST $API/machines/$ID/actions -H "Authorization: Bearer $TOKEN" \
 
 Watch the browser tab while those run.
 
-## 9. Stop and delete
+## 8. Stop and delete
 
 ```sh
 curl -s -X POST $API/machines/$ID/stop -H "Authorization: Bearer $TOKEN"
@@ -207,6 +176,29 @@ curl -s -X DELETE $API/machines/$ID -H "Authorization: Bearer $TOKEN"
 disk. If it cannot tear the machine down it returns 502 and leaves the machine
 registered, so you can retry. A delete that quietly forgets a running machine
 would leave you with a VM nobody can name.
+
+## Building your own image
+
+The downloaded image suits most people. Build your own if you want different
+packages, or if you would rather not download one.
+
+This needs Docker running, because it compiles the guest daemon and injects it
+into the root filesystem in a privileged container. On Apple Silicon it also
+needs [Try Omarchy](https://github.com/omacom/try-omarchy) installed in
+`/Applications`, which is where the base Omarchy filesystem comes from. The
+script verifies that app's code signature and the checksum of every artifact it
+takes. Neither is used again afterwards.
+
+```sh
+git clone https://github.com/obaid/hyperwake-core
+cd hyperwake-core
+npm install
+python3 bin/native-prepare --output ~/.hyperwake
+```
+
+That writes `~/.hyperwake/image`, which is where the engine looks. Pass a
+different `--output` only if you also set `HYPERWAKE_HOME` to match. Existing
+images are never overwritten; move the old directory aside to rebuild.
 
 ## Connecting an agent
 

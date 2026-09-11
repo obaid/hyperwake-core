@@ -177,7 +177,7 @@
         <li class="grp">Setup</li>
         <li><a href="#requirements">Requirements</a></li>
         <li><a href="#install">Install</a></li>
-        <li><a href="#image">Guest image</a></li>
+        <li><a href="#image">The guest image</a></li>
         <li><a href="#run">Run the engine</a></li>
         <li class="grp">Using it</li>
         <li><a href="#first">Your first computer</a></li>
@@ -242,28 +242,27 @@
       </div>
 
       <h2 id="install">Install</h2>
-      <p>Nothing to install for the engine itself. <code>npx</code> fetches it when you run it.</p>
+      <p>Nothing to install. <code>npx</code> fetches the engine when you run it, and the engine fetches its guest image on first start.</p>
       <pre><code>npx hyperwake          <span class="c"># start</span>
 npx hyperwake doctor   <span class="c"># check this host</span></code></pre>
-      <p>Building a guest image is a separate step with heavier requirements, covered next. You need the repository for that, because it compiles the guest daemon from Go source.</p>
 
-      <h2 id="image">Build a guest image</h2>
-      <p>Every machine is cloned from one base image, and you build it once.</p>
+      <h2 id="image">The guest image</h2>
+      <p>Machines are cloned from a base image. <strong>The first time you run the engine it downloads one</strong>, verifies its checksums and puts it in <code>~/.hyperwake/image</code>. There is no second command to learn.</p>
+      <pre><code>npx hyperwake
 
-      <div class="note warn">
-        <span class="tag">This step needs more than running machines does</span>
-        <p><strong>Docker, running.</strong> The build compiles the guest daemon and injects it into the root filesystem inside a privileged container.</p>
-        <p><strong>On Apple Silicon, <a href="https://github.com/omacom/try-omarchy">Try Omarchy</a> installed in <code>/Applications</code>.</strong> That is where the base Omarchy filesystem comes from. The script verifies the app's code signature and the checksum of every artifact it takes.</p>
-        <p>Neither is used again afterwards. Machines run under your own QEMU.</p>
-      </div>
+  fetching guest image omarchy-4.0.1-aarch64
+  root.ext4   1496 / 1496 MB 100%
+  guest image ready</code></pre>
+      <p>It is about 1.5 GB and takes a few minutes on a decent connection, once. Every machine afterwards is a copy-on-write clone of it, which is why creating one takes about a second.</p>
+      <p>Set <code>HYPERWAKE_IMAGE_URL</code> to a manifest of your own to use a different image, including a <code>file://</code> path on a machine with no internet.</p>
 
+      <h3>Building one instead</h3>
+      <p>Build your own if you want different packages, or would rather not download one. This needs <strong>Docker running</strong>, because it compiles the guest daemon and injects it into the root filesystem in a privileged container. On Apple Silicon it also needs <a href="https://github.com/omacom/try-omarchy">Try Omarchy</a> installed in <code>/Applications</code>, which is where the base Omarchy filesystem comes from. Neither is used again afterwards.</p>
       <pre><code>git clone https://github.com/obaid/hyperwake-core
 cd hyperwake-core
 npm install
 python3 bin/native-prepare --output ~/.hyperwake</code></pre>
-
-      <p>That writes <code>~/.hyperwake/image</code>, which is exactly where the engine looks. Pass a different <code>--output</code> only if you also set <code>HYPERWAKE_HOME</code> to match.</p>
-      <p>It takes several minutes and produces a 16 GB sparse disk. Existing images are never overwritten. To rebuild, move the old directory aside first.</p>
+      <p>Pass a different <code>--output</code> only if you also set <code>HYPERWAKE_HOME</code> to match.</p>
 
       <h2 id="run">Run the engine</h2>
       <pre><code>npx hyperwake</code></pre>
@@ -411,6 +410,7 @@ curl -s -X DELETE $API/machines/$ID -H "Authorization: Bearer $TOKEN"</code></pr
             <tr><td class="m">HYPERWAKE_MAX_RUNNING</td><td class="m">2</td><td>how many machines may run at once</td></tr>
             <tr><td class="m">HYPERWAKE_MAX_MEMORY_MB</td><td class="m">8192</td><td>total memory machines may reserve</td></tr>
             <tr><td class="m">HYPERWAKE_GIC</td><td class="m">3</td><td>ARM interrupt controller version</td></tr>
+            <tr><td class="m">HYPERWAKE_IMAGE_URL</td><td class="m">GitHub release</td><td>manifest to fetch the guest image from</td></tr>
           </tbody>
         </table>
       </div>

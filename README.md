@@ -40,13 +40,14 @@ npx hyperwake doctor
 It reports what it found rather than what it assumes, and names anything that is
 missing.
 
-You also need a guest image, and building one has heavier requirements than
-running machines does: Docker, and on Apple Silicon a copy of
-[Try Omarchy](https://github.com/omacom/try-omarchy) to take the base image
-from. That is a one time step. Once the image exists, nothing in the running
-path touches either of them.
+Machines are cloned from a base image. The first time you run the engine it
+downloads one, verifies its checksums and puts it in place, so there is no
+second command to learn.
 
-[Getting started](docs/getting-started.md) covers it.
+Point `HYPERWAKE_IMAGE_URL` at your own manifest to use a different image, or
+build one yourself with `bin/native-prepare`. Building needs Docker, and on
+Apple Silicon a copy of Try Omarchy to take the base filesystem from.
+[Getting started](docs/getting-started.md) covers both.
 
 ## Your first computer
 

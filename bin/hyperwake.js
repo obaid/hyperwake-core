@@ -3,6 +3,7 @@ import { inspectHost } from '../src/preflight.js';
 import { createServer } from '../src/server.js';
 import { stateDir } from '../src/paths.js';
 import { ensurePython } from '../src/python.js';
+import { downloadImage, manifestUrl } from '../src/image.js';
 
 const command = process.argv[2] ?? 'start';
 const port = Number(
@@ -78,8 +79,21 @@ if (!host.hostReady) {
 if (!host.image) {
   console.log(bold('\nHyperwake engine\n'));
   reportHost(host);
-  explainMissingImage(host);
-  process.exit(1);
+  // Fetch it rather than asking the operator to learn a second command. The
+  // build path stays available for anyone who wants to make their own.
+  console.log('');
+  try {
+    await downloadImage();
+  } catch (error) {
+    if (error.code === 'NO_MANIFEST') {
+      console.log(`  ${dim('no prebuilt image available:')} ${dim(manifestUrl())}`);
+      explainMissingImage(host);
+    } else {
+      console.log(`\n${red('Could not fetch the guest image.')} ${error.message}\n`);
+      console.log(`  Retry, or build one yourself: ${dim('https://obaid.github.io/hyperwake-core/#image')}\n`);
+    }
+    process.exit(1);
+  }
 }
 
 process.env.HYPERWAKE_PORT = String(port);

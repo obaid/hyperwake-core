@@ -9,6 +9,7 @@ process.env.HYPERWAKE_HOME = mkdtempSync(join(tmpdir(), 'hyperwake-test-'));
 const { presentStatus, validateSpec, validateAction } = await import('../src/api.js');
 const { Registry } = await import('../src/state.js');
 const { GuestService } = await import('../src/guest.js');
+const { manifestUrl, hasImage, imageDir } = await import('../src/image.js');
 
 test('a running machine is not ready until the guest reports in', () => {
   assert.equal(presentStatus('running', {}), 'booting');
@@ -100,4 +101,33 @@ test('the registry survives a reload', () => {
 
   reopened.remove(record.id);
   assert.equal(new Registry(file).get(record.id), null);
+});
+
+test('a host with no image is not ready, and says so specifically', async () => {
+  const { inspectHost } = await import('../src/preflight.js');
+  const host = inspectHost();
+  // The test home is empty, so whatever this host can do, it has no image.
+  assert.equal(hasImage(), false);
+  assert.equal(host.image, false);
+  assert.equal(host.ready, false, 'ready must account for the image, not just the hypervisor');
+  if (host.hostReady) {
+    assert.match(host.reason, /No guest image/, 'the reason names the image, not the hypervisor');
+  }
+});
+
+test('the image source can be pointed elsewhere', () => {
+  const original = process.env.HYPERWAKE_IMAGE_URL;
+  try {
+    delete process.env.HYPERWAKE_IMAGE_URL;
+    assert.match(manifestUrl(), /^https:\/\//, 'there is a default to fall back on');
+    process.env.HYPERWAKE_IMAGE_URL = 'file:///tmp/mine/manifest.json';
+    assert.equal(manifestUrl(), 'file:///tmp/mine/manifest.json');
+  } finally {
+    if (original === undefined) delete process.env.HYPERWAKE_IMAGE_URL;
+    else process.env.HYPERWAKE_IMAGE_URL = original;
+  }
+});
+
+test('the image lives inside the state directory', () => {
+  assert.ok(imageDir().startsWith(process.env.HYPERWAKE_HOME));
 });
