@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Package a prepared guest image and publish it where the engine can fetch it.
+
+Takes an image directory built by `native-prepare`, compresses the root
+filesystem, writes a manifest naming every artifact with its digest, and
+uploads the set to a GitHub release.
+
+    bin/publish-image --image ~/.hyperwake/image --tag image-latest
+
+Nothing is uploaded without --tag, so you can build and inspect the bundle
+first. Re-running against an existing tag replaces the assets.
+"""
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOTFS = 'root.ext4'
+SIDECARS = ('vmlinuz-linux', 'initramfs-linux.img', 'guest-manifest.json',
+            'provenance.json', 'packages.lock.txt', 'build-spec.json', 'LICENSE.omarchy')
+
+
+def digest(path):
+    h = hashlib.sha256()
+    with path.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1 << 20), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def human(n):
+    return f'{n / 1024 ** 2:,.0f} MB'
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument('--image', type=Path, default=Path.home() / '.hyperwake/image',
+                   help='image directory built by native-prepare')
+    p.add_argument('--out', type=Path, default=Path('.hyperwake/dist/image'),
+                   help='where to stage the bundle')
+    p.add_argument('--repo', default='obaid/hyperwake-core')
+    p.add_argument('--tag', help='GitHub release tag to upload to; omit to build only')
+    p.add_argument('--version', help='version label recorded in the manifest')
+    a = p.parse_args()
+
+    image = a.image.resolve()
+    rootfs = image / ROOTFS
+    if not rootfs.is_file():
+        sys.exit(f'No {ROOTFS} in {image}. Build one with bin/native-prepare first.')
+
+    if not shutil.which('zstd'):
+        sys.exit('zstd is required to compress the root filesystem. `brew install zstd`.')
+
+    out = a.out.resolve()
+    out.mkdir(parents=True, exist_ok=True)
+
+    # The engine grows the filesystem back to this size after decompressing, so
+    # a machine never finds a disk smaller than the image claims.
+    sparse_bytes = rootfs.stat().st_size
+
+    version = a.version
+    if not version:
+        manifest_path = image / 'guest-manifest.json'
+        if manifest_path.is_file():
+            guest = json.loads(manifest_path.read_text()).get('guest', {})
+            version = f"omarchy-{guest.get('version', 'unknown')}-{guest.get('architecture', 'unknown')}"
+        else:
+            version = 'unknown'
+
+    compressed = out / f'{ROOTFS}.zst'
+    if compressed.exists():
+        print(f'Reusing {compressed.name}')
+    else:
+        print(f'Compressing {ROOTFS} ({human(sparse_bytes)} sparse)...', flush=True)
+        subprocess.run(['zstd', '-3', '-T0', '-q', str(rootfs), '-o', str(compressed)], check=True)
+
+    base = f'https://github.com/{a.repo}/releases/download/{a.tag or "TAG"}'
+    artifacts = [{
+        'name': ROOTFS,
+        'url': f'{base}/{ROOTFS}.zst',
+        'sha256': digest(compressed),
+        'bytes': compressed.stat().st_size,
+        'compression': 'zstd',
+        'sparse_bytes': sparse_bytes,
+    }]
+
+    for name in SIDECARS:
+        source = image / name
+        if not source.is_file():
+            continue
+        target = out / name
+        if not target.exists() or target.stat().st_mtime < source.stat().st_mtime:
+            shutil.copy2(source, target)
+        artifacts.append({
+            'name': name,
+            'url': f'{base}/{name}',
+            'sha256': digest(target),
+            'bytes': target.stat().st_size,
+        })
+
+    manifest = {'version': version, 'artifacts': artifacts}
+    (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+
+    total = sum(x['bytes'] for x in artifacts)
+    print(f'\nBundle ready in {out}')
+    for x in artifacts:
+        print(f'  {x["name"]:<24} {human(x["bytes"]):>10}')
+    print(f'  {"total download":<24} {human(total):>10}')
+
+    if not a.tag:
+        print('\nNo --tag given, so nothing was uploaded.')
+        print(f'Test it locally:\n  (cd {out} && python3 -m http.server 8910)')
+        print('  HYPERWAKE_IMAGE_URL=http://127.0.0.1:8910/manifest.json npx hyperwake')
+        return
+
+    if not shutil.which('gh'):
+        sys.exit('The GitHub CLI is required to upload. https://cli.github.com')
+
+    assets = [str(out / 'manifest.json'), str(compressed)] + \
+             [str(out / x['name']) for x in artifacts if x['name'] != ROOTFS]
+
+    existing = subprocess.run(['gh', 'release', 'view', a.tag, '--repo', a.repo],
+                              capture_output=True, text=True)
+    if existing.returncode != 0:
+        print(f'\nCreating release {a.tag}...')
+        subprocess.run(['gh', 'release', 'create', a.tag, '--repo', a.repo,
+                        '--title', f'Guest image {version}', '--notes',
+                        f'Prebuilt Omarchy guest image ({version}). Fetched automatically on first run.\n\n'
+                        f'Total download {human(total)}. Artifacts and digests are in manifest.json.'],
+                       check=True)
+
+    print(f'Uploading {len(assets)} assets to {a.tag}...', flush=True)
+    subprocess.run(['gh', 'release', 'upload', a.tag, '--repo', a.repo, '--clobber', *assets], check=True)
+
+    print(f'\nPublished. The engine will fetch:\n  {base}/manifest.json')
+    print('\nRelease assets on a private repository need authentication to')
+    print('download, so npx hyperwake can only fetch these once the repository')
+    print('is public, or if HYPERWAKE_IMAGE_URL points somewhere else.')
+
+
+if __name__ == '__main__':
+    main()
