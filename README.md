@@ -156,9 +156,14 @@ that made it.
 
 ## Licence
 
-AGPL-3.0-or-later. Running an unmodified copy carries no obligation, including
-commercially. Running a *modified* version as a network service means offering
-your users the source of your changes.
+[FSL-1.1-ALv2](LICENSE.md). The source is public, and you can read it, change it,
+and run it for anything you like, including inside a business. What you may not
+do is package it up as a competing commercial product or service. Two years
+after each release, that version converts to Apache 2.0 and the restriction
+lifts entirely.
+
+That makes this fair source rather than open source in the OSI sense, which is
+worth stating plainly rather than blurring.
 
 Omarchy and the bundled dependencies keep their own licences. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Hyperwake is independent and

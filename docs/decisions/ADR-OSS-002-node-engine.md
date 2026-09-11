@@ -109,9 +109,11 @@ what generation fencing and the evidence model are *for*.
 - The panel's `Native`/`Docker` drivers can eventually be retired in favour of
   talking to a local engine, so there is one implementation of "run a VM on a
   host" rather than two.
-- Licence: AGPL-3.0 per ADR-OSS-001, and this split makes it cleaner — the
-  copyleft covers the engine, the panel is a separate program communicating over
-  a documented network protocol.
+- Licence: the engine ships under FSL-1.1-ALv2, which permits every use except
+  packaging it as a competing commercial product, and converts each release to
+  Apache 2.0 after two years. ADR-OSS-001 proposed AGPL; the split makes the
+  stricter choice workable, because the panel is a separate program talking over
+  a documented network protocol rather than a derivative work.
 
 ## Sequence
 
