@@ -1,7 +1,10 @@
 # Hyperwake
 
-Give an agent a real Linux computer, running on your own machine, and talk to it
-over HTTP.
+**Throwaway Omarchy computers for your agents.**
+
+A real Arch and Hyprland desktop in its own virtual machine, on hardware you
+already own. One second to make one. Seven to use it. Delete it and make
+another.
 
 ```sh
 npx hyperwake
