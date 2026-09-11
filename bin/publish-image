@@ -67,8 +67,12 @@ def main():
     if not version:
         manifest_path = image / 'guest-manifest.json'
         if manifest_path.is_file():
-            guest = json.loads(manifest_path.read_text()).get('guest', {})
-            version = f"omarchy-{guest.get('version', 'unknown')}-{guest.get('architecture', 'unknown')}"
+            # The Omarchy release lives under `upstream`; `guest` carries the
+            # architecture and display geometry, not a version.
+            data = json.loads(manifest_path.read_text())
+            release = data.get('upstream', {}).get('release', 'unknown')
+            arch = data.get('guest', {}).get('architecture', 'unknown')
+            version = f'omarchy-{release}-{arch}'
         else:
             version = 'unknown'
 
