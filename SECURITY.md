@@ -49,5 +49,3 @@ open a minimal issue requesting a private contact route without sensitive detail
 Private vulnerability reporting must be enabled before a public launch.
 
 Report the affected revision, deployment mode, impact, and minimal reproduction.
-Release status and remaining verification are in
-`docs/implementation/open-source-release.md`.

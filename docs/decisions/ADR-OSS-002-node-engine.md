@@ -109,12 +109,15 @@ what generation fencing and the evidence model are *for*.
 - The panel's `Native`/`Docker` drivers can eventually be retired in favour of
   talking to a local engine, so there is one implementation of "run a VM on a
   host" rather than two.
-- Licence: the engine ships under PolyForm Noncommercial 1.0.0. Any
-  noncommercial purpose is permitted; commercial use needs a separate licence.
-  ADR-OSS-001 proposed AGPL, which would have let anyone build a commercial
-  product on the engine. The split makes the stricter choice workable, because
-  the panel talks to the engine over a documented network protocol rather than
-  linking against it.
+- Licence: the engine ships under FSL-1.1-ALv2. Every use is permitted except
+  selling something that competes with Hyperwake, and each release converts to
+  Apache 2.0 two years after it ships. ADR-OSS-001 proposed AGPL, which lets a
+  competitor host the engine unmodified and satisfy the licence by pointing at
+  this repository. A noncommercial licence was tried and rejected for the
+  opposite reason: it bans the engineer running `npx hyperwake` on a work
+  laptop, who is the whole audience. The split makes a non-compete workable,
+  because the panel talks to the engine over a documented network protocol
+  rather than linking against it.
 
 ## Sequence
 

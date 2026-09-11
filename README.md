@@ -154,13 +154,13 @@ that made it.
 
 ## Licence
 
-[PolyForm Noncommercial 1.0.0](LICENSE.md). You may read, change, and run this
-software for any noncommercial purpose. That covers personal projects, research,
-teaching, and use by charities, schools, and government bodies. Commercial use
-requires a separate licence.
+[Functional Source License 1.1](LICENSE.md). Use Hyperwake for anything, at home
+or at work, including inside a product you sell. The one thing you may not do is
+sell Hyperwake itself, or a service that does what it does.
 
-This licence is not open source. The source is published and you can read it,
-but the terms restrict who may use it.
+Every release becomes Apache 2.0 two years after it ships, and that grant is
+irrevocable. Until then the source is published and you can read, change, and run
+it, but the terms are not open source by the OSI definition.
 
 Omarchy and the bundled dependencies keep their own licences. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Hyperwake is independent and
