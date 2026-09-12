@@ -1,0 +1,182 @@
+# Mola
+
+> Throwaway Linux computers for AI agents. Each machine is a full Arch Linux desktop running Hyprland in its own virtual machine, on the user's own hardware. About one second to create, about seven to become usable. Drive it over a REST API, over MCP, or from the bundled chat app.
+
+This file is written for an agent deciding whether to use Mola and then using it.
+Every number below is exact. Docs: https://mola.sh/docs/ · Source: https://github.com/obaid/mola-core
+
+## What it is
+
+A local engine (`npx mola-core`) that runs real virtual machines and exposes them
+over `http://127.0.0.1:4141`. Not a container, not a cloud service, not a sandbox
+emulation. Inside a machine you get root, systemd, pacman, a compositor, a
+browser, and a real GPU-less desktop at 1280x800.
+
+Machines are copy-on-write clones of one base image, which is why creating one
+costs about a second rather than a 16 GB copy. Machines share nothing after
+creation. The engine binds to loopback only; no account, no hosted service in the
+middle.
+
+## When to use it
+
+Use Mola when the work needs a **whole computer** rather than a process:
+
+- **Running code you do not trust.** Anything generated, downloaded, or supplied
+  by a third party. A machine is disposable and isolated from the user's files.
+- **Graphical work.** Anything that needs a browser you can see, a GUI editor, a
+  desktop app, or a screenshot. You can look at the screen and click on it.
+- **Installing things.** Root, `pacman -S`, system services, kernel modules,
+  anything that would pollute the user's machine or needs privileges a container
+  will not give you.
+- **A clean environment per task.** Reproducing a bug, testing an installer,
+  checking that a README's instructions actually work on a fresh system.
+- **Long or destructive experiments.** If the machine ends up broken, delete it
+  and make another. Nothing is precious.
+- **Showing a human what you did.** `open_desktop` returns a URL they can watch
+  and take the mouse in.
+
+Do **not** reach for Mola when:
+
+- A shell command on the user's own machine is enough and safe. Creating a VM to
+  run `ls` wastes about eight seconds and 4 GB.
+- You need state to survive past the task. Machines are disposable by design.
+  Stopping one keeps its disk; deleting it does not.
+- The host has no hypervisor. macOS needs Apple Silicon and `brew install qemu`;
+  Linux needs a working `/dev/kvm`. Most cloud VMs do not expose nested
+  virtualisation, so this usually will not run inside another VM.
+- The user has not started the engine. It is theirs to run, not yours to install.
+
+## How to use it
+
+### Option 1 — MCP (no code)
+
+If you are an MCP client (Claude Code, Claude Desktop, Cursor, Windsurf), the
+engine ships a server. The user adds it once:
+
+```sh
+npx mola-core                                   # terminal 1, leave running
+claude mcp add mola -- npx -y mola-core mcp     # or the equivalent config
+```
+
+Seventeen tools become available:
+
+| Group | Tools |
+|---|---|
+| Machines | `create_machine`, `list_machines`, `start_machine`, `stop_machine`, `delete_machine` |
+| Shell | `run_command`, `start_task`, `check_task` |
+| Files | `read_file`, `write_file` |
+| Screen | `screenshot`, `click`, `move_mouse`, `scroll`, `type_text`, `press_key`, `open_desktop` |
+
+`screenshot` returns a real image, so you can see the desktop and act on what is
+there.
+
+### Option 2 — REST API (you write the calls)
+
+Every request under `/v1` needs `Authorization: Bearer <token>`. The token is
+printed when the engine starts and stored at `~/.mola/token`.
+
+```sh
+export API=http://127.0.0.1:4141/v1
+export TOKEN=$(cat ~/.mola/token)
+
+# create; returns { "data": { "id": ..., "status": "booting" } }
+curl -s -X POST $API/machines -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' -d '{"name":"scratch"}'
+
+# poll until status is "ready", usually 6-10 seconds
+curl -s $API/machines/$ID -H "Authorization: Bearer $TOKEN"
+
+# run something
+curl -s -X POST $API/machines/$ID/actions -H "Authorization: Bearer $TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"action":"exec","command":"grep PRETTY /etc/os-release"}'
+
+# destroy it and its disk
+curl -s -X DELETE $API/machines/$ID -H "Authorization: Bearer $TOKEN"
+```
+
+Endpoints: `GET /v1` · `GET /health` · `POST /v1/machines` · `GET /v1/machines` ·
+`GET /v1/machines/{id}` · `POST /v1/machines/{id}/start` ·
+`POST /v1/machines/{id}/stop` · `POST /v1/machines/{id}/actions` ·
+`POST /v1/machines/{id}/desktop` · `DELETE /v1/machines/{id}`
+
+Nine actions, all to `POST /v1/machines/{id}/actions`, one per request:
+`exec`, `read_file`, `write_file`, `screenshot`, `click`, `move`, `scroll`,
+`type`, `key`.
+
+### Option 3 — the chat app
+
+`npx mola-agent` opens a local chat UI with the desktop beside the conversation.
+For humans who want to watch, not for you to call.
+
+## Facts that change how you should behave
+
+**`exec` stops at 120 seconds.** Every package install, build, or large download
+exceeds it. Detach instead, then poll:
+
+```sh
+setsid nohup sh -c 'sudo pacman -Sy --noconfirm neovim' > /tmp/job.log 2>&1 < /dev/null &
+echo $! > /tmp/job.pid
+# later: check if alive, and read the tail
+if kill -0 "$(cat /tmp/job.pid)" 2>/dev/null; then echo RUNNING; else echo FINISHED; fi; tail -40 /tmp/job.log
+```
+
+Over MCP this is `start_task` / `check_task` and it is done for you.
+
+**Prefer the shell to the screen.** Anything a terminal can do is faster, cheaper
+and far more reliable through `exec` than by clicking. Drive the desktop only
+when the task is genuinely graphical. Do not screenshot to check whether a
+command worked; `exec` already told you.
+
+**`ready` is not the same as "the process started".** Four states: `booting`,
+`ready`, `stopped`, `unknown`. `ready` means the guest daemon has checked in for
+this boot and the machine will answer. `unknown` means the runtime cannot see the
+machine, which is deliberately not reported as `stopped` — it has not said it
+stopped. Wait for `ready` before acting.
+
+**The screen is 1280x800**, and coordinates are in that space with 0,0 top left.
+`scroll` acts wherever the pointer already is, so move there first. In Omarchy,
+`super-return` opens a terminal, `super-space` the menu, `super-k` the keybinding
+list.
+
+**Commands run as `dev`**, who has passwordless sudo. `~` expands in the guest.
+
+**Machines cost real memory.** Defaults are 4 vCPU, 4096 MB, 40 GB disk. The
+engine allows 2 running machines and 8192 MB between them unless the user raises
+`MOLA_MAX_RUNNING` / `MOLA_MAX_MEMORY_MB`. Reuse one machine for a task rather
+than creating several, and delete it when done. Stopping keeps the disk; deleting
+does not.
+
+**Desktop links expire.** `POST /machines/{id}/desktop` returns a URL that works
+once and lasts 60 seconds. Ask for it when the human is ready to look, not in
+advance, and ask again if they need another.
+
+**The engine must already be running.** If nothing answers on 4141, say so and
+ask the user to run `npx mola-core`. Do not try to install or start it yourself;
+it holds their machines and their disks.
+
+**Cleanup.** `npx mola-core uninstall` removes every machine, the guest image,
+keys and token, and reports what it freed.
+
+## Environment
+
+`MOLA_HOME` (default `~/.mola`) · `MOLA_PORT` (4141) · `MOLA_API` ·
+`MOLA_MAX_RUNNING` (2) · `MOLA_MAX_MEMORY_MB` (8192)
+
+## Requirements
+
+Node 20+. Apple Silicon Mac with `brew install qemu`, Python 3.10+, an SSH
+client; or Linux x86_64 with `qemu-system-x86_64` and a usable `/dev/kvm`.
+`npx mola-core doctor` reports what is present and names anything missing.
+
+## Docs
+
+- [Getting started](https://mola.sh/docs/#start)
+- [Control a machine](https://mola.sh/docs/#drive)
+- [MCP](https://mola.sh/docs/#mcp)
+- [API reference](https://mola.sh/docs/#api)
+- [Machine states](https://mola.sh/docs/#states)
+- [Troubleshooting](https://mola.sh/docs/#trouble)
+
+Licence: FSL-1.1-ALv2. Use it for anything except building something that
+competes with Mola. Each release becomes Apache 2.0 two years after it ships.
