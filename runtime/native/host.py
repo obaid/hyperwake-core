@@ -95,7 +95,7 @@ class Runner:
         if self.accel not in capabilities.split(): raise ValueError('QEMU lacks ' + self.accel)
         self.machines = self.root / 'machines'
         self.machines.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.sockets = Path('/tmp') / ('hyperwake-' + str(os.getuid()) + '-' + hashlib.sha256(str(self.root).encode()).hexdigest()[:12]) if platform.system() != 'Windows' else self.root
+        self.sockets = Path('/tmp') / ('mola-' + str(os.getuid()) + '-' + hashlib.sha256(str(self.root).encode()).hexdigest()[:12]) if platform.system() != 'Windows' else self.root
         self.sockets.mkdir(mode=0o700, exist_ok=True)
         if self.sockets.is_symlink() or (platform.system() != 'Windows' and self.sockets.stat().st_uid != os.getuid()):
             raise ValueError('Unsafe socket directory')
@@ -111,7 +111,7 @@ class Runner:
 
     def metadata(self, identifier):
         data = json.loads((self.folder(identifier) / 'machine.json').read_text())
-        if data.get('id') != identifier or data.get('managed_by') != 'hyperwake-native-v1':
+        if data.get('id') != identifier or data.get('managed_by') != 'mola-native-v1':
             raise ValueError('Refusing unmanaged machine')
         return data
 
@@ -134,7 +134,7 @@ class Runner:
             if 'QMP' not in json.loads(wire.readline(65536)): raise OSError('Not a QMP socket')
             wire.write(b'{"execute":"qmp_capabilities"}\n'); wire.flush(); response()
             wire.write(b'{"execute":"query-name"}\n'); wire.flush()
-            if response().get('name') != 'hyperwake-' + data['id']:
+            if response().get('name') != 'mola-' + data['id']:
                 raise ValueError('QMP machine identity mismatch')
             wire.write(json.dumps({'execute': command}).encode() + b'\n'); wire.flush()
             return response()
@@ -206,7 +206,7 @@ class Runner:
         ports = set()
         while len(ports) < 3: ports.add(free_port())
         ssh_port, vnc_port, qmp_port = sorted(ports)
-        data = {'managed_by': 'hyperwake-native-v1', 'id': identifier, 'vcpus': cpus, 'memory_mb': memory,
+        data = {'managed_by': 'mola-native-v1', 'id': identifier, 'vcpus': cpus, 'memory_mb': memory,
                 'ssh_port': ssh_port, 'vnc_port': vnc_port, 'qmp_port': qmp_port}
         write_json(folder / 'machine.json', data)
         return self.describe(identifier)
@@ -222,7 +222,7 @@ class Runner:
             machine = 'q35,accel=' + self.accel
             cpu = self.config.get('cpu', 'host')
         qmp = ('tcp:127.0.0.1:' + str(data['qmp_port'])) if platform.system() == 'Windows' else 'unix:' + str(self.sockets / (data['id'] + '.sock'))
-        args = [str(self.qemu), '-name', 'hyperwake-' + data['id'], '-machine', machine, '-cpu', cpu,
+        args = [str(self.qemu), '-name', 'mola-' + data['id'], '-machine', machine, '-cpu', cpu,
                 '-smp', str(data['vcpus']), '-m', str(data['memory_mb']), '-nodefaults',
                 '-kernel', str(self.image / 'vmlinuz-linux'), '-initrd', str(self.image / 'initramfs-linux.img'),
                 '-append', self.config['kernel_args'], '-qmp', qmp + ',server=on,wait=off',
@@ -348,7 +348,7 @@ def main():
     server = ThreadingHTTPServer(('127.0.0.1', args.port), Handler)
     server.daemon_threads = True
     server.runner, server.token = runner, token
-    print(f'Hyperwake native host listening on 127.0.0.1:{args.port} ({runner.accel}/{runner.arch})', flush=True)
+    print(f'Mola native host listening on 127.0.0.1:{args.port} ({runner.accel}/{runner.arch})', flush=True)
     try: server.serve_forever()
     except KeyboardInterrupt: pass
     finally: server.server_close()

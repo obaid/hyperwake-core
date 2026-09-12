@@ -1,11 +1,11 @@
 # Troubleshooting
 
-## `hyperwake doctor` says it is not ready
+## `mola-core doctor` says it is not ready
 
 It names what is missing. The usual answers:
 
 **No QEMU with the hvf accelerator.** On a Mac, `brew install qemu`. If you have
-a QEMU somewhere else, point at it with `HYPERWAKE_QEMU=/path/to/qemu-system-aarch64`.
+a QEMU somewhere else, point at it with `MOLA_QEMU=/path/to/qemu-system-aarch64`.
 
 **No `/dev/kvm`** on Linux. Either virtualisation is off in firmware, or you are
 inside a VM whose host does not expose nested virtualisation. Many cloud
@@ -24,19 +24,19 @@ with `--port=4242`.
 **`Runtime did not become healthy`** means the Python supervisor failed to come
 up. Its errors are printed with a `[runtime]` prefix above that line. The most
 common cause is a Python that cannot import its dependencies; delete
-`~/.hyperwake/python` and start again to rebuild the virtualenv.
+`~/.mola/python` and start again to rebuild the virtualenv.
 
 ## A machine never reaches ready
 
 Look at its console log:
 
 ```sh
-tail -40 ~/.hyperwake/runtime/machines/<id>/console.log
+tail -40 ~/.mola/runtime/machines/<id>/console.log
 ```
 
 **`HVF does not support GICv2 emulation`** means the engine chose the wrong
 interrupt controller for your QEMU. Stock QEMU on HVF needs GICv3. Set
-`HYPERWAKE_GIC=3` and create the machine again.
+`MOLA_GIC=3` and create the machine again.
 
 **`QEMU exited during launch`** is reported with the machine's `runtime.log`
 beside the console log. That file holds QEMU's own error.
@@ -73,7 +73,7 @@ new tab, or reload after changing it.
 
 The engine refuses to start more machines than it has room for. Defaults are two
 running machines and 8192 MB of reserved memory. Raise them with
-`HYPERWAKE_MAX_RUNNING` and `HYPERWAKE_MAX_MEMORY_MB`, or stop a machine you are
+`MOLA_MAX_RUNNING` and `MOLA_MAX_MEMORY_MB`, or stop a machine you are
 not using.
 
 Stopped machines cost disk, not memory, and do not count against either limit.
@@ -83,7 +83,7 @@ Stopped machines cost disk, not memory, and do not count against either limit.
 The engine could not tear the machine down, so it left it registered rather than
 forgetting a virtual machine that may still be running. The response says why.
 Retry the delete; if it keeps failing, look for the QEMU process yourself and
-check `~/.hyperwake/runtime/machines/<id>/` for what is left behind.
+check `~/.mola/runtime/machines/<id>/` for what is left behind.
 
 ## A machine appears that you did not create
 
@@ -97,7 +97,7 @@ real and running; delete it normally if you do not want it.
 Check whether graphics are accelerated:
 
 ```sh
-npx hyperwake doctor
+npx mola-core doctor
 ```
 
 `software (llvmpipe)` means the guest renders on the CPU. That works, but a

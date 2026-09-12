@@ -1,22 +1,22 @@
 # Development
 
 ```sh
-git clone https://github.com/obaid/hyperwake-core
-cd hyperwake-core
+git clone https://github.com/obaid/mola-core
+cd mola-core
 npm install
 ```
 
 ## Running from a checkout
 
 ```sh
-node bin/hyperwake.js doctor
-node bin/hyperwake.js start
+node bin/mola.js doctor
+node bin/mola.js start
 ```
 
 Use a separate state directory so you do not disturb an installed engine:
 
 ```sh
-HYPERWAKE_HOME=/tmp/hw-dev HYPERWAKE_PORT=4242 node bin/hyperwake.js start
+MOLA_HOME=/tmp/hw-dev MOLA_PORT=4242 node bin/mola.js start
 ```
 
 ## Tests
@@ -31,7 +31,7 @@ protocol and the registry. They run in well under a second and need no QEMU.
 The end to end test needs a running engine and creates a real machine:
 
 ```sh
-HYPERWAKE_HOME=/tmp/hw-dev HYPERWAKE_BASE=http://127.0.0.1:4242 test/acceptance.sh
+MOLA_HOME=/tmp/hw-dev MOLA_BASE=http://127.0.0.1:4242 test/acceptance.sh
 ```
 
 It creates a machine, waits for ready, runs a command, round-trips a file, mints
@@ -46,7 +46,7 @@ runs under newman.
 
 | | |
 |---|---|
-| `bin/hyperwake.js` | CLI entry point: `start` and `doctor` |
+| `bin/mola.js` | CLI entry point: `start` and `doctor` |
 | `src/preflight.js` | what this host can do, measured |
 | `src/server.js` | HTTP routing and request handling |
 | `src/api.js` | validation and response shaping |

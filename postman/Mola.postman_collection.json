@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "Hyperwake Engine",
-    "description": "Omarchy computers on your own machine, over HTTP.\n\n**Setup**\n\n1. Run `npx hyperwake` (or `node bin/hyperwake.js start`). It prints an API URL and a token.\n2. Import the matching environment file, or set the collection variables `baseUrl` and `token` below.\n3. Run **Create machine** first \u2014 it saves the new id into `{{machineId}}` automatically, so every other request just works.\n\n**Order that tells the whole story**\n\nCreate machine \u2192 Get machine (poll until `status` is `ready`) \u2192 Exec \u2192 Write file \u2192 Read file \u2192 Screenshot \u2192 Open desktop \u2192 Stop \u2192 Delete.\n\nOr press **Run** on the `Walkthrough` folder and watch it do all of that with assertions.",
+    "name": "Mola Engine",
+    "description": "Omarchy computers on your own machine, over HTTP.\n\n**Setup**\n\n1. Run `npx mola-core` (or `node bin/mola.js start`). It prints an API URL and a token.\n2. Import the matching environment file, or set the collection variables `baseUrl` and `token` below.\n3. Run **Create machine** first \u2014 it saves the new id into `{{machineId}}` automatically, so every other request just works.\n\n**Order that tells the whole story**\n\nCreate machine \u2192 Get machine (poll until `status` is `ready`) \u2192 Exec \u2192 Write file \u2192 Read file \u2192 Screenshot \u2192 Open desktop \u2192 Stop \u2192 Delete.\n\nOr press **Run** on the `Walkthrough` folder and watch it do all of that with assertions.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -23,7 +23,7 @@
     {
       "key": "token",
       "value": "",
-      "description": "Printed by the engine on start; also in ~/.hyperwake/token"
+      "description": "Printed by the engine on start; also in ~/.mola/token"
     },
     {
       "key": "machineId",
@@ -79,7 +79,7 @@
                 "exec": [
                   "pm.test('the engine describes itself', () => {",
                   "  const body = pm.response.json();",
-                  "  pm.expect(body.service).to.eql('hyperwake-engine');",
+                  "  pm.expect(body.service).to.eql('mola-engine');",
                   "  pm.expect(body.endpoints).to.be.an('object');",
                   "});",
                   "console.log('host:', JSON.stringify(pm.response.json().host));"

@@ -2,12 +2,12 @@
 
 Two files:
 
-- `Hyperwake.postman_collection.json` — 30 requests in four folders
-- `Hyperwake.local.postman_environment.json` — `baseUrl`, and an empty `token` for you to paste into
+- `Mola.postman_collection.json` — 30 requests in four folders
+- `Mola.local.postman_environment.json` — `baseUrl`, and an empty `token` for you to paste into
 
 ## Use
 
-1. Start the engine: `npx hyperwake` (or `node bin/hyperwake.js start`). It
+1. Start the engine: `npx mola-core` (or `node bin/mola.js start`). It
    prints an API URL and a token.
 2. Import both files into Postman and paste the printed token into the
    environment's `token` variable. It ships empty on purpose: a token committed
@@ -25,8 +25,8 @@ see the live desktop.
 ## From the command line
 
 ```sh
-npx newman run postman/Hyperwake.postman_collection.json \
-  -e postman/Hyperwake.local.postman_environment.json \
+npx newman run postman/Mola.postman_collection.json \
+  -e postman/Mola.local.postman_environment.json \
   --folder Walkthrough --timeout-request 200000 --delay-request 2500
 ```
 

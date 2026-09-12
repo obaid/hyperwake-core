@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-process.env.HYPERWAKE_HOME = mkdtempSync(join(tmpdir(), 'hyperwake-test-'));
+process.env.MOLA_HOME = mkdtempSync(join(tmpdir(), 'mola-test-'));
 
 const { presentStatus, validateSpec, validateAction } = await import('../src/api.js');
 const { Registry } = await import('../src/state.js');
@@ -45,7 +45,7 @@ test('only known actions are accepted', () => {
 });
 
 test('a registration token cannot be redeemed twice', () => {
-  const registry = new Registry(join(process.env.HYPERWAKE_HOME, 'a.json'));
+  const registry = new Registry(join(process.env.MOLA_HOME, 'a.json'));
   const guests = new GuestService(registry);
   const record = registry.create({ name: 'x', vcpus: 1, memory_mb: 1024, disk_gb: 16 });
 
@@ -59,7 +59,7 @@ test('a registration token cannot be redeemed twice', () => {
 });
 
 test('an enrolment key lets a lost response be recovered', () => {
-  const registry = new Registry(join(process.env.HYPERWAKE_HOME, 'b.json'));
+  const registry = new Registry(join(process.env.MOLA_HOME, 'b.json'));
   const guests = new GuestService(registry);
   const record = registry.create({ name: 'x', vcpus: 1, memory_mb: 1024, disk_gb: 16 });
 
@@ -70,14 +70,14 @@ test('an enrolment key lets a lost response be recovered', () => {
 });
 
 test('an unknown registration token is refused', () => {
-  const registry = new Registry(join(process.env.HYPERWAKE_HOME, 'c.json'));
+  const registry = new Registry(join(process.env.MOLA_HOME, 'c.json'));
   const guests = new GuestService(registry);
   assert.equal(guests.register({ registration_token: 'nope' }).status, 401);
   assert.equal(guests.register({}).status, 401);
 });
 
 test('capabilities are recorded as a claim, and the challenge rotates', () => {
-  const registry = new Registry(join(process.env.HYPERWAKE_HOME, 'd.json'));
+  const registry = new Registry(join(process.env.MOLA_HOME, 'd.json'));
   const guests = new GuestService(registry);
   const record = registry.create({ name: 'x', vcpus: 1, memory_mb: 1024, disk_gb: 16 });
   guests.register({ registration_token: record.registration_token });
@@ -92,7 +92,7 @@ test('capabilities are recorded as a claim, and the challenge rotates', () => {
 });
 
 test('the registry survives a reload', () => {
-  const file = join(process.env.HYPERWAKE_HOME, 'e.json');
+  const file = join(process.env.MOLA_HOME, 'e.json');
   const first = new Registry(file);
   const record = first.create({ name: 'keeper', vcpus: 2, memory_mb: 2048, disk_gb: 20 });
 
@@ -116,18 +116,18 @@ test('a host with no image is not ready, and says so specifically', async () => 
 });
 
 test('the image source can be pointed elsewhere', () => {
-  const original = process.env.HYPERWAKE_IMAGE_URL;
+  const original = process.env.MOLA_IMAGE_URL;
   try {
-    delete process.env.HYPERWAKE_IMAGE_URL;
+    delete process.env.MOLA_IMAGE_URL;
     assert.match(manifestUrl(), /^https:\/\//, 'there is a default to fall back on');
-    process.env.HYPERWAKE_IMAGE_URL = 'file:///tmp/mine/manifest.json';
+    process.env.MOLA_IMAGE_URL = 'file:///tmp/mine/manifest.json';
     assert.equal(manifestUrl(), 'file:///tmp/mine/manifest.json');
   } finally {
-    if (original === undefined) delete process.env.HYPERWAKE_IMAGE_URL;
-    else process.env.HYPERWAKE_IMAGE_URL = original;
+    if (original === undefined) delete process.env.MOLA_IMAGE_URL;
+    else process.env.MOLA_IMAGE_URL = original;
   }
 });
 
 test('the image lives inside the state directory', () => {
-  assert.ok(imageDir().startsWith(process.env.HYPERWAKE_HOME));
+  assert.ok(imageDir().startsWith(process.env.MOLA_HOME));
 });

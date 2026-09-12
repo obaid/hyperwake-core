@@ -76,7 +76,7 @@ export async function createServer({ host, port }) {
     try {
       // ---- unauthenticated: health and the desktop viewer -------------------
       if (method === 'GET' && url.pathname === '/health') {
-        return json(response, 200, { ok: true, service: 'hyperwake-engine', runtime: await runtime.healthy() });
+        return json(response, 200, { ok: true, service: 'mola-engine', runtime: await runtime.healthy() });
       }
       if (method === 'GET' && url.pathname.startsWith('/novnc/')) {
         return serveNovnc(url.pathname, response);
@@ -114,7 +114,7 @@ export async function createServer({ host, port }) {
 
       if (method === 'GET' && parts.length === 1) {
         return json(response, 200, {
-          service: 'hyperwake-engine',
+          service: 'mola-engine',
           version: '0.1.0',
           host: { platform: host.platform, arch: host.arch, accelerator: host.accelerator },
           endpoints: {

@@ -7,7 +7,7 @@ import { downloadImage, manifestUrl } from '../src/image.js';
 
 const command = process.argv[2] ?? 'start';
 const port = Number(
-  process.env.HYPERWAKE_PORT
+  process.env.MOLA_PORT
   || process.argv.find((argument) => argument.startsWith('--port='))?.split('=')[1]
   || 4141,
 );
@@ -42,15 +42,15 @@ function explainMissingImage(host) {
   console.log('  That step needs Docker running, and on Apple Silicon a copy of Try');
   console.log('  Omarchy in /Applications to take the base filesystem from. Neither is');
   console.log('  used again once the image exists.\n');
-  console.log(dim('    git clone https://github.com/obaid/hyperwake-core'));
-  console.log(dim('    cd hyperwake-core && npm install'));
+  console.log(dim('    git clone https://github.com/obaid/mola-core'));
+  console.log(dim('    cd mola-core && npm install'));
   console.log(dim(`    python3 bin/native-prepare --output ${home}`));
-  console.log(`\n  ${dim('https://hyperwake.ai/#image')}\n`);
+  console.log(`\n  ${dim('https://mola.sh/#image')}\n`);
 }
 
 if (command === 'doctor') {
   const host = inspectHost();
-  console.log(bold('\nHyperwake engine — host check\n'));
+  console.log(bold('\nMola engine — host check\n'));
   reportHost(host);
   if (!host.hostReady) {
     console.log(`\n${red('Not ready.')} ${host.reason}\n`);
@@ -75,19 +75,19 @@ if (command === 'mcp') {
 }
 
 if (command !== 'start') {
-  console.log('usage: hyperwake [start|doctor|mcp] [--port=4141]');
+  console.log('usage: mola-core [start|doctor|mcp] [--port=4141]');
   process.exit(1);
 }
 
 const host = inspectHost();
 if (!host.hostReady) {
-  console.log(bold('\nHyperwake engine\n'));
+  console.log(bold('\nMola engine\n'));
   reportHost(host);
   console.log(`\n${red('Cannot start.')} ${host.reason}\n`);
   process.exit(1);
 }
 if (!host.image) {
-  console.log(bold('\nHyperwake engine\n'));
+  console.log(bold('\nMola engine\n'));
   reportHost(host);
   // Fetch it rather than asking the operator to learn a second command. The
   // build path stays available for anyone who wants to make their own.
@@ -100,20 +100,20 @@ if (!host.image) {
       explainMissingImage(host);
     } else {
       console.log(`\n${red('Could not fetch the guest image.')} ${error.message}\n`);
-      console.log(`  Retry, or build one yourself: ${dim('https://hyperwake.ai/#image')}\n`);
+      console.log(`  Retry, or build one yourself: ${dim('https://mola.sh/#image')}\n`);
     }
     process.exit(1);
   }
 }
 
-process.env.HYPERWAKE_PORT = String(port);
+process.env.MOLA_PORT = String(port);
 ensurePython();
 const { server, runtime, token } = await createServer({ host, port });
 
 server.listen(port, '127.0.0.1', () => {
   const base = `http://127.0.0.1:${port}`;
   console.log(`
-${bold('  Hyperwake')} ${dim('· Omarchy computers on this machine')}
+${bold('  Mola')} ${dim('· Omarchy computers on this machine')}
 
   ${bold('API')}    ${green(`${base}/v1`)}
   ${bold('Token')}  ${token}

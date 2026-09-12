@@ -1,6 +1,6 @@
-# Using Hyperwake from Claude Code, Claude Desktop and other MCP clients
+# Using Mola from Claude Code, Claude Desktop and other MCP clients
 
-Hyperwake ships an [MCP](https://modelcontextprotocol.io) server, so an agent you
+Mola ships an [MCP](https://modelcontextprotocol.io) server, so an agent you
 already use can create a Linux computer and work on it. You write a config file
 rather than any code.
 
@@ -9,7 +9,7 @@ rather than any code.
 Start the engine and leave it running:
 
 ```sh
-npx hyperwake
+npx mola-core
 ```
 
 Then add the server to your client.
@@ -17,7 +17,7 @@ Then add the server to your client.
 ### Claude Code
 
 ```sh
-claude mcp add hyperwake -- npx -y hyperwake mcp
+claude mcp add mola -- npx -y mola-core mcp
 ```
 
 ### Claude Desktop
@@ -28,9 +28,9 @@ or `%APPDATA%\Claude\claude_desktop_config.json` on Windows:
 ```json
 {
   "mcpServers": {
-    "hyperwake": {
+    "mola": {
       "command": "npx",
-      "args": ["-y", "hyperwake", "mcp"]
+      "args": ["-y", "mola-core", "mcp"]
     }
   }
 }
@@ -41,7 +41,7 @@ Restart the app afterwards.
 ### Cursor, Windsurf and others
 
 Any client that speaks MCP over stdio takes the same command and arguments:
-`npx -y hyperwake mcp`.
+`npx -y mola-core mcp`.
 
 If your engine is not on the default port, or its state is somewhere else, pass
 the environment through:
@@ -49,10 +49,10 @@ the environment through:
 ```json
 {
   "mcpServers": {
-    "hyperwake": {
+    "mola": {
       "command": "npx",
-      "args": ["-y", "hyperwake", "mcp"],
-      "env": { "HYPERWAKE_PORT": "4242", "HYPERWAKE_HOME": "/path/to/state" }
+      "args": ["-y", "mola-core", "mcp"],
+      "env": { "MOLA_PORT": "4242", "MOLA_HOME": "/path/to/state" }
     }
   }
 }
@@ -92,7 +92,7 @@ something slow rather than going quiet for four minutes.
 
 **`screenshot` is how the agent sees.** It returns the screen as an image, which
 MCP passes to the model. This is what makes a model that has never heard of
-Hyperwake able to use a desktop: it looks, clicks, looks again.
+Mola able to use a desktop: it looks, clicks, looks again.
 
 `open_desktop` returns a link you open in a browser to watch and control the
 machine yourself. It works once and expires after sixty seconds, so use it
@@ -101,7 +101,7 @@ promptly, and ask for another whenever you want one.
 ## Things worth knowing
 
 **The engine has to be running.** If it is not, the tools say so rather than
-failing quietly. Run `npx hyperwake` in a terminal and leave it there. The MCP
+failing quietly. Run `npx mola-core` in a terminal and leave it there. The MCP
 server does not start the engine itself, because a server that dies when you
 close your editor should not own machines that outlive it.
 
@@ -119,7 +119,7 @@ that is the moment to look at what it is about to do.
 
 | What you see | What it means |
 |---|---|
-| Tools listed, every call says the engine is not running | Start `npx hyperwake`, or the port does not match |
+| Tools listed, every call says the engine is not running | Start `npx mola-core`, or the port does not match |
 | The server does not appear at all | The client cannot run `npx`; try an absolute path to node |
 | `No machine with that id` | It was deleted, or the agent invented an id. Ask it to list machines |
 | A command returns nothing for a long time | It probably needed `start_task`; ask the agent to use that instead |
@@ -128,5 +128,5 @@ To see the traffic, run the server by hand. It logs to stderr and speaks
 JSON-RPC on stdout:
 
 ```sh
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | npx hyperwake mcp
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | npx mola-core mcp
 ```

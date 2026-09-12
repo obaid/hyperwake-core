@@ -13,10 +13,10 @@ import { statePath } from './paths.js';
  * a machine with no internet. The manifest names each artifact, its digest and
  * whether it arrives compressed, so the engine never has to guess.
  */
-const DEFAULT_MANIFEST = 'https://github.com/obaid/hyperwake-core/releases/download/image-latest/manifest.json';
+const DEFAULT_MANIFEST = 'https://github.com/obaid/mola-core/releases/download/image-latest/manifest.json';
 
 export function manifestUrl() {
-  return process.env.HYPERWAKE_IMAGE_URL || DEFAULT_MANIFEST;
+  return process.env.MOLA_IMAGE_URL || DEFAULT_MANIFEST;
 }
 
 export function imageDir() {

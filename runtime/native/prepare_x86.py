@@ -1,4 +1,4 @@
-"""Export Hyperwake's Docker-built x86 guest for native Linux/Windows QEMU."""
+"""Export Mola's Docker-built x86 guest for native Linux/Windows QEMU."""
 import json
 from pathlib import Path
 import platform
@@ -17,7 +17,7 @@ def prepare(root, output, qemu):
     if image.exists(): raise SystemExit('Image exists. Use a new --output; existing disks are never overwritten.')
     subprocess.run([sys.executable, str(root / 'bin/build-images'), '--guest-only'], check=True)
     image.mkdir(parents=True, mode=0o700)
-    name = 'hyperwake-export-' + uuid.uuid4().hex[:12]
+    name = 'mola-export-' + uuid.uuid4().hex[:12]
     subprocess.run(['docker', 'create', '--name', name, 'hyperwake/omarchy-kvm:local'], check=True, stdout=subprocess.DEVNULL)
     try:
         subprocess.run(['docker', 'cp', name + ':/opt/hyperwake/.', str(image)], check=True)

@@ -1,4 +1,4 @@
-# Hyperwake
+# Mola
 
 **Instant computers powered by Omarchy that your AI agents can see, control,
 and operate.**
@@ -8,7 +8,7 @@ Linux and Hyprland in its own virtual machine, on hardware you already own. One
 second to make one. Seven to use it. Delete it and make another.
 
 ```sh
-npx hyperwake
+npx mola-core
 ```
 
 The engine starts and prints an address and a token:
@@ -38,7 +38,7 @@ Node 20 or newer, plus:
 Check your machine before you start:
 
 ```sh
-npx hyperwake doctor
+npx mola-core doctor
 ```
 
 It reports what it found rather than what it assumes, and names anything that is
@@ -47,7 +47,7 @@ missing.
 Machines are cloned from a base image. The first run downloads one, verifies its
 checksums, and puts it in place, so you learn no second command.
 
-Set `HYPERWAKE_IMAGE_URL` to use a different image, or build one with
+Set `MOLA_IMAGE_URL` to use a different image, or build one with
 `bin/native-prepare`. The script checks its own prerequisites and names anything
 missing. [Getting started](docs/getting-started.md) covers both.
 
@@ -98,7 +98,7 @@ The engine ships an MCP server, so an agent you already use can drive a machine.
 No code, one line of config:
 
 ```sh
-claude mcp add hyperwake -- npx -y hyperwake mcp
+claude mcp add mola -- npx -y mola-core mcp
 ```
 
 Then ask for something that needs a computer: *"make me a Linux machine, install
@@ -130,11 +130,11 @@ assertions.
 
 ## Documentation
 
-The full docs are at **[hyperwake.ai](https://hyperwake.ai)**. The same pages live
+The full docs are at **[mola.sh](https://mola.sh)**. The same pages live
 in this repository:
 
 - [Getting started](docs/getting-started.md), from install to a working computer
-- [MCP](docs/mcp.md), using Hyperwake from Claude Code and other agents
+- [MCP](docs/mcp.md), using Mola from Claude Code and other agents
 - [API reference](docs/api.md), every endpoint and action
 - [Concepts](docs/concepts.md), what a machine is and what its states mean
 - [Troubleshooting](docs/troubleshooting.md), failures you are likely to hit
@@ -155,13 +155,13 @@ The rest are build inputs.
 
 ## Where state lives
 
-Everything the engine owns sits in `~/.hyperwake`, which you can move with
-`HYPERWAKE_HOME`. It is deliberately outside the package, because `npx` installs
+Everything the engine owns sits in `~/.mola`, which you can move with
+`MOLA_HOME`. It is deliberately outside the package, because `npx` installs
 into a cache that gets cleared, and a computer's disk has to outlive the tool
 that made it.
 
 ```
-~/.hyperwake/
+~/.mola/
   token           the operator token
   keys/           the engine's SSH key, generated on first run
   machines.json   what exists
@@ -172,15 +172,15 @@ that made it.
 
 ## Licence
 
-[Functional Source License 1.1](LICENSE.md). Use Hyperwake for anything, at home
+[Functional Source License 1.1](LICENSE.md). Use Mola for anything, at home
 or at work, including inside a product you sell. The one thing you may not do is
-sell Hyperwake itself, or a service that does what it does.
+sell Mola itself, or a service that does what it does.
 
 Every release becomes Apache 2.0 two years after it ships, and that grant is
 irrevocable. Until then the source is published and you can read, change, and run
 it, but the terms are not open source by the OSI definition.
 
 Omarchy and the bundled dependencies keep their own licences. See
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Hyperwake is independent and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Mola is independent and
 is not affiliated with or endorsed by Omarchy, DHH, 37signals, Basecamp, or the
 Omacom Foundation.

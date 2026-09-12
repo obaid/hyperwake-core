@@ -1,5 +1,5 @@
 node_modules/
-.hyperwake/
+.mola/
 __pycache__/
 *.pyc
 .DS_Store
@@ -7,3 +7,6 @@ __pycache__/
 # Compiled guest daemons. Build them with `make -C guest/hyperwake-guest`.
 guest/hyperwake-guest/bin/
 image/*/bin/hyperwake-guest*
+
+# Decision records: kept locally, not published.
+docs/decisions/

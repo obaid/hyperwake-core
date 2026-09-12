@@ -6,7 +6,7 @@ cleaning up. It takes about ten minutes, most of which is the first image build.
 ## 1. Check the machine you are on
 
 ```sh
-npx hyperwake doctor
+npx mola-core doctor
 ```
 
 You should see something like:
@@ -41,11 +41,11 @@ is faster.
 ## 2. Start the engine
 
 ```sh
-npx hyperwake
+npx mola-core
 ```
 
 The first run downloads a guest image, verifies it and puts it in
-`~/.hyperwake/image`. It is about 1.5 GB and takes a few minutes on a decent
+`~/.mola/image`. It is about 1.5 GB and takes a few minutes on a decent
 connection. Every machine you create afterwards is a copy-on-write clone of it,
 which is why creating one takes about a second.
 
@@ -57,10 +57,10 @@ export API=http://127.0.0.1:4141/v1
 export TOKEN=...        # copy from the banner
 ```
 
-The token also lives in `~/.hyperwake/token`, so you can do this instead:
+The token also lives in `~/.mola/token`, so you can do this instead:
 
 ```sh
-export TOKEN=$(cat ~/.hyperwake/token)
+export TOKEN=$(cat ~/.mola/token)
 ```
 
 The engine binds to loopback only. Nothing outside your machine can reach it.
@@ -183,17 +183,17 @@ The downloaded image suits most people. Build your own to change the package set
 or to avoid the download.
 
 ```sh
-git clone https://github.com/obaid/hyperwake-core
-cd hyperwake-core
+git clone https://github.com/obaid/mola-core
+cd mola-core
 npm install
-python3 bin/native-prepare --output ~/.hyperwake
+python3 bin/native-prepare --output ~/.mola
 ```
 
 The script checks its own prerequisites first and names anything missing before
 it starts work.
 
-That writes `~/.hyperwake/image`, which is where the engine looks. If you pass a
-different `--output`, set `HYPERWAKE_HOME` to match. The script never overwrites
+That writes `~/.mola/image`, which is where the engine looks. If you pass a
+different `--output`, set `MOLA_HOME` to match. The script never overwrites
 an existing image, so move the old directory aside to rebuild.
 
 ## Connecting an agent

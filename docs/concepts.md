@@ -72,11 +72,11 @@ the host.
 
 ## Where data lives
 
-Everything the engine owns is in `~/.hyperwake`, or wherever `HYPERWAKE_HOME`
+Everything the engine owns is in `~/.mola`, or wherever `MOLA_HOME`
 points.
 
 ```
-~/.hyperwake/
+~/.mola/
   token           the operator token
   keys/           the engine's SSH key, generated on first run
   machines.json   the registry: names, sizes, guest credentials
@@ -99,7 +99,7 @@ one answer eventually disagree.
 Three separate credentials, each doing one job.
 
 The operator token authenticates you to the engine. It is created on first run
-and lives in `~/.hyperwake/token`.
+and lives in `~/.mola/token`.
 
 The engine's SSH key is generated on first run and its public half is installed
 into each machine at creation. Nothing is baked into the base image, so no two
@@ -118,7 +118,7 @@ machine gets one from virtio-gpu.
 It does not need a GPU. With a plain virtio-gpu device the guest renders on the
 CPU through llvmpipe, which is enough for a working desktop. If your QEMU was
 built with virglrenderer, the engine uses `virtio-gpu-gl` instead and rendering
-is accelerated. `hyperwake doctor` reports which one you have.
+is accelerated. `mola-core doctor` reports which one you have.
 
 The desktop leaves the machine over its own VNC server, which the engine proxies
 to your browser. The QEMU display is not involved.

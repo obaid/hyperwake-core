@@ -5,7 +5,7 @@ Takes an image directory built by `native-prepare`, compresses the root
 filesystem, writes a manifest naming every artifact with its digest, and
 uploads the set to a GitHub release.
 
-    bin/publish-image --image ~/.hyperwake/image --tag image-latest
+    bin/publish-image --image ~/.mola/image --tag image-latest
 
 Nothing is uploaded without --tag, so you can build and inspect the bundle
 first. Re-running against an existing tag replaces the assets.
@@ -39,11 +39,11 @@ def human(n):
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('--image', type=Path, default=Path.home() / '.hyperwake/image',
+    p.add_argument('--image', type=Path, default=Path.home() / '.mola/image',
                    help='image directory built by native-prepare')
-    p.add_argument('--out', type=Path, default=Path('.hyperwake/dist/image'),
+    p.add_argument('--out', type=Path, default=Path('.mola/dist/image'),
                    help='where to stage the bundle')
-    p.add_argument('--repo', default='obaid/hyperwake-core')
+    p.add_argument('--repo', default='obaid/mola-core')
     p.add_argument('--tag', help='GitHub release tag to upload to; omit to build only')
     p.add_argument('--version', help='version label recorded in the manifest')
     p.add_argument('--part-mb', type=int, default=256,
@@ -147,7 +147,7 @@ def main():
     if not a.tag:
         print('\nNo --tag given, so nothing was uploaded.')
         print(f'Test it locally:\n  (cd {out} && python3 -m http.server 8910)')
-        print('  HYPERWAKE_IMAGE_URL=http://127.0.0.1:8910/manifest.json npx hyperwake')
+        print('  MOLA_IMAGE_URL=http://127.0.0.1:8910/manifest.json npx mola-core')
         return
 
     if not shutil.which('gh'):
@@ -171,8 +171,8 @@ def main():
 
     print(f'\nPublished. The engine will fetch:\n  {base}/manifest.json')
     print('\nRelease assets on a private repository need authentication to')
-    print('download, so npx hyperwake can only fetch these once the repository')
-    print('is public, or if HYPERWAKE_IMAGE_URL points somewhere else.')
+    print('download, so npx mola-core can only fetch these once the repository')
+    print('is public, or if MOLA_IMAGE_URL points somewhere else.')
 
 
 if __name__ == '__main__':

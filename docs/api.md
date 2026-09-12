@@ -1,7 +1,7 @@
 # API reference
 
 The engine serves `http://127.0.0.1:4141` by default. Change the port with
-`HYPERWAKE_PORT` or `--port=`.
+`MOLA_PORT` or `--port=`.
 
 ## Authentication
 
@@ -11,7 +11,7 @@ Every endpoint under `/v1`, and the asset routes, need a bearer token:
 Authorization: Bearer <token>
 ```
 
-The token is printed when the engine starts and stored in `~/.hyperwake/token`.
+The token is printed when the engine starts and stored in `~/.mola/token`.
 It is generated once and reused. Delete the file to rotate it; the engine writes
 a new one on the next start.
 
@@ -39,7 +39,7 @@ Returns the endpoint list and what this host can do.
 
 ```json
 {
-  "service": "hyperwake-engine",
+  "service": "mola-engine",
   "version": "0.1.0",
   "host": { "platform": "darwin", "arch": "arm64", "accelerator": "hvf" },
   "endpoints": { "...": "..." }
@@ -224,10 +224,10 @@ proving it holds its enrolment key, rather than by repeating the token.
 
 | | |
 |---|---|
-| `HYPERWAKE_HOME` | state directory, default `~/.hyperwake` |
-| `HYPERWAKE_PORT` | listen port, default 4141 |
-| `HYPERWAKE_QEMU` | a specific QEMU binary to use |
-| `HYPERWAKE_MAX_RUNNING` | how many machines may run at once, default 2 |
-| `HYPERWAKE_MAX_MEMORY_MB` | total memory machines may reserve, default 8192 |
-| `HYPERWAKE_GPU` | override the QEMU display device |
-| `HYPERWAKE_DISPLAY` | override the QEMU display backend |
+| `MOLA_HOME` | state directory, default `~/.mola` |
+| `MOLA_PORT` | listen port, default 4141 |
+| `MOLA_QEMU` | a specific QEMU binary to use |
+| `MOLA_MAX_RUNNING` | how many machines may run at once, default 2 |
+| `MOLA_MAX_MEMORY_MB` | total memory machines may reserve, default 8192 |
+| `MOLA_GPU` | override the QEMU display device |
+| `MOLA_DISPLAY` | override the QEMU display backend |

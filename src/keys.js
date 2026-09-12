@@ -18,7 +18,7 @@ export function guestKey() {
   const pub = `${priv}.pub`;
 
   if (!existsSync(priv)) {
-    execFileSync('ssh-keygen', ['-t', 'ed25519', '-N', '', '-C', 'hyperwake-engine', '-f', priv], { stdio: 'ignore' });
+    execFileSync('ssh-keygen', ['-t', 'ed25519', '-N', '', '-C', 'mola-engine', '-f', priv], { stdio: 'ignore' });
   }
   return { privateKey: priv, publicKey: readFileSync(pub, 'utf8').trim(), knownHosts: join(dir, 'known_hosts') };
 }

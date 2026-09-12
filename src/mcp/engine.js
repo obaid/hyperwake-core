@@ -31,13 +31,13 @@ export class EngineError extends Error {
 }
 
 export function createEngine({
-  base = process.env.HYPERWAKE_API || `http://127.0.0.1:${process.env.HYPERWAKE_PORT || 4141}`,
+  base = process.env.MOLA_API || `http://127.0.0.1:${process.env.MOLA_PORT || 4141}`,
   token = readToken(),
   fetchImpl = fetch,
 } = {}) {
   async function call(method, path, body, { timeoutMs = 180_000 } = {}) {
     if (!token) {
-      throw new EngineDown('No engine token. Start the engine first with: npx hyperwake');
+      throw new EngineDown('No engine token. Start the engine first with: npx mola-core');
     }
 
     // A machine action can legitimately take minutes. An abort signal keeps a
@@ -59,7 +59,7 @@ export function createEngine({
         throw new EngineError(504, `The engine did not answer within ${Math.round(timeoutMs / 1000)}s.`);
       }
       // ECONNREFUSED and friends all mean the same thing to a user.
-      throw new EngineDown(`No engine at ${base}. Start it with: npx hyperwake`);
+      throw new EngineDown(`No engine at ${base}. Start it with: npx mola-core`);
     }
 
     const text = await response.text();

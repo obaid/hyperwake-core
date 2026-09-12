@@ -4,11 +4,11 @@
 # Proves what the README claims: a fresh Omarchy computer, driven entirely over
 # HTTP, with nothing left behind afterwards. Run the engine first, then:
 #
-#   HYPERWAKE_HOME=... test/acceptance.sh
+#   MOLA_HOME=... test/acceptance.sh
 set -euo pipefail
 
-BASE="${HYPERWAKE_BASE:-http://127.0.0.1:4141}"
-HOME_DIR="${HYPERWAKE_HOME:?set HYPERWAKE_HOME to the engine state directory}"
+BASE="${MOLA_BASE:-http://127.0.0.1:4141}"
+HOME_DIR="${MOLA_HOME:?set MOLA_HOME to the engine state directory}"
 TOKEN="$(cat "$HOME_DIR/token")"
 
 api() {
@@ -26,7 +26,7 @@ step()  { printf '  %-34s' "$1"; }
 ok()    { printf 'ok  %s\n' "${1:-}"; }
 
 echo
-echo "Hyperwake engine acceptance"
+echo "Mola engine acceptance"
 echo
 
 step "unauthenticated request refused"
@@ -87,8 +87,8 @@ ok
 step "delete"
 # Asserted, not assumed. A delete whose response nobody reads is how a
 # machine survives a test that claims to have removed it.
-code=$(curl -sS -o /tmp/hyperwake-delete.json -w '%{http_code}' -X DELETE "$BASE/v1/machines/$id" -H "Authorization: Bearer $TOKEN")
-[ "$code" = "200" ] || { echo "FAILED (HTTP $code: $(cat /tmp/hyperwake-delete.json))"; exit 1; }
+code=$(curl -sS -o /tmp/mola-delete.json -w '%{http_code}' -X DELETE "$BASE/v1/machines/$id" -H "Authorization: Bearer $TOKEN")
+[ "$code" = "200" ] || { echo "FAILED (HTTP $code: $(cat /tmp/mola-delete.json))"; exit 1; }
 ok
 
 step "nothing left behind"

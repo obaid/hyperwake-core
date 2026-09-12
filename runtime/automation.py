@@ -61,7 +61,7 @@ def run(payload):
         remote = "python3 -c \"import base64; exec(base64.b64decode('" + encoded + "'))\""
         args = ['ssh', '-T', '-o', 'BatchMode=yes', '-o', 'IdentitiesOnly=yes',
                 '-o', 'ConnectTimeout=10', '-o', 'StrictHostKeyChecking=accept-new',
-                '-o', 'HostKeyAlias=hyperwake-' + target['id'],
+                '-o', 'HostKeyAlias=mola-' + target['id'],
                 '-o', 'UserKnownHostsFile=' + target['known_hosts'],
                 '-i', target['ssh_key'], '-p', str(target['ssh_port']),
                 'dev@' + host, remote]
@@ -82,7 +82,7 @@ def run(payload):
     with api.connect(f'{host}::{int(port)}', factory_class=DesktopFactory, timeout=15) as client:
         op = action['action']
         if op == 'screenshot':
-            with tempfile.TemporaryDirectory(prefix='hyperwake-screen-') as temp:
+            with tempfile.TemporaryDirectory(prefix='mola-screen-') as temp:
                 path = Path(temp) / 'screen.png'
                 # The first WayVNC update may be its placeholder framebuffer.
                 # Request the next full update after capture has started.

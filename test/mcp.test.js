@@ -29,7 +29,7 @@ const hello = {
 test('initialize succeeds even with no engine, so the server still appears', async () => {
   const engine = createEngine({ token: null });
   const [reply] = await exchange([hello], { engine });
-  assert.equal(reply.result.serverInfo.name, 'hyperwake');
+  assert.equal(reply.result.serverInfo.name, 'mola');
   assert.equal(reply.result.protocolVersion, '2025-06-18');
   assert.ok(reply.result.capabilities.tools);
 });
@@ -84,7 +84,7 @@ test('a down engine reaches the model as a readable tool error', async () => {
     { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_machines', arguments: {} } },
   ], { engine });
   assert.equal(reply.result.isError, true);
-  assert.match(reply.result.content[0].text, /npx hyperwake/);
+  assert.match(reply.result.content[0].text, /npx mola-core/);
 });
 
 test('malformed input is reported without killing the session', async () => {

@@ -15,7 +15,7 @@ export const packageRoot = resolve(here, '..');
  * without warning, and a machine's disk must outlive the tool that made it.
  */
 export function stateDir() {
-  const base = process.env.HYPERWAKE_HOME || join(homedir(), '.hyperwake');
+  const base = process.env.MOLA_HOME || join(homedir(), '.mola');
   mkdirSync(base, { recursive: true, mode: 0o700 });
   return base;
 }
@@ -31,7 +31,7 @@ export function statePath(...parts) {
  * development does not require reinstalling.
  */
 export function runtimeScript(name) {
-  const override = process.env.HYPERWAKE_RUNTIME_DIR;
+  const override = process.env.MOLA_RUNTIME_DIR;
   if (override) return join(override, name);
   return join(packageRoot, 'runtime', name);
 }

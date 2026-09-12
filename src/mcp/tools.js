@@ -13,7 +13,7 @@ const text = (value) => ({ content: [{ type: 'text', text: value }] });
 const json = (value) => text(JSON.stringify(value, null, 2));
 
 /** Where a background task keeps its output, one file per handle. */
-const taskLog = (handle) => `/tmp/hyperwake-task-${handle}.log`;
+const taskLog = (handle) => `/tmp/mola-task-${handle}.log`;
 
 function describeMachine(m) {
   return {

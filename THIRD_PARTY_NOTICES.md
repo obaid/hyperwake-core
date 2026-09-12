@@ -1,10 +1,10 @@
 # Third-party notices
 
-The root MIT license covers Hyperwake's original code. It does not relicense
+The root MIT license covers Mola's original code. It does not relicense
 third-party operating systems, packages, artwork, fonts, or trademarks.
 
 - Omarchy: https://github.com/omacom/omarchy — MIT. Its name and marks remain
-  subject to their owners' rights. Hyperwake is independent and not endorsed.
+  subject to their owners' rights. Mola is independent and not endorsed.
 - Arch Linux and Omarchy image packages: each package retains its upstream
   license. Package metadata and installed license files accompany the image.
 - Linux kernel, QEMU, Mesa, and the Debian runtime: retain their component

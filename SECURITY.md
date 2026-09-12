@@ -19,7 +19,7 @@ until isolation, abuse controls, backup/restore, and recovery have been verified
 - API actions resolve computers within the authenticated account and require
   write ability. A read-only token cannot execute commands or control the screen.
 - Bootstrap generates random account credentials and API keys. Never run the
-  development seeder in a deployment. Keep `.hyperwake` private and backed up.
+  development seeder in a deployment. Keep `.mola` private and backed up.
 - SSH guest keys are pinned on first use with a computer-specific alias. This
   is trust-on-first-use, not an out-of-band host-key attestation scheme.
 - Users and their agents can read credentials stored inside their own guest.
@@ -35,7 +35,7 @@ arguments. Guest SSH/VNC binds loopback, and QMP verifies the computer identity
 before mutations. Windows QMP also uses loopback; other local user processes are
 outside the isolation boundary. Use a dedicated host account on shared machines.
 
-Keep `.hyperwake` private. POSIX files are restricted to the operator; Windows
+Keep `.mola` private. POSIX files are restricted to the operator; Windows
 ACL behavior still requires hardware verification. An agent with access to the
 host operator's credentials or Docker socket can control that host. Native VM
 disks must be stopped before a consistent offline backup. Snapshots and automated

@@ -38,7 +38,7 @@ function asToolError(error) {
         type: 'text',
         text:
           `${error.message}\n\n`
-          + 'The Hyperwake engine is not running. Ask the person to run `npx hyperwake` '
+          + 'The Mola engine is not running. Ask the person to run `npx mola-core` '
           + 'in a terminal and leave it running, then try again.',
       }],
       isError: true,
@@ -69,9 +69,9 @@ export function createMcpServer({ engine = createEngine() } = {}) {
         return {
           protocolVersion: PROTOCOL_VERSION,
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: 'hyperwake', version: version() },
+          serverInfo: { name: 'mola', version: version() },
           instructions:
-            'Hyperwake gives you throwaway Linux computers. Each one is a full Arch Linux '
+            'Mola gives you throwaway Linux computers. Each one is a full Arch Linux '
             + 'desktop running Hyprland in its own virtual machine.\n\n'
             + 'Start with create_machine, then reuse its id. Prefer run_command for anything '
             + 'a shell can do, because it is faster and more reliable than driving the screen. '
@@ -113,6 +113,6 @@ export function createMcpServer({ engine = createEngine() } = {}) {
 
 export async function runMcpServer(options = {}) {
   const { methods, tools } = createMcpServer(options);
-  log(`hyperwake mcp: ${tools.length} tools, protocol ${PROTOCOL_VERSION}`);
+  log(`mola mcp: ${tools.length} tools, protocol ${PROTOCOL_VERSION}`);
   await serve({ methods, ...options });
 }

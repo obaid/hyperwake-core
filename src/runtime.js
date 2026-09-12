@@ -30,7 +30,7 @@ export class Runtime {
     this.host = host;
     // Chosen at start time. A fixed port collides with anything else on this
     // machine that speaks the same protocol, which is exactly what happened
-    // the first time this ran alongside another Hyperwake deployment.
+    // the first time this ran alongside another Mola deployment.
     this.port = port;
     this.base = null;
     this.child = null;
@@ -51,19 +51,19 @@ export class Runtime {
       // Omarchy desktop; a headless QEMU display fails to bring the compositor
       // up. The desktop still leaves the machine over the guest's own VNC
       // server, so callers never touch this window.
-      display: process.env.HYPERWAKE_DISPLAY
+      display: process.env.MOLA_DISPLAY
         || (this.host.acceleratedGraphics && this.host.platform === 'darwin'
           ? 'cocoa,gl=es,show-cursor=on,full-screen=off,full-grab=off'
           : 'none'),
       // Fall back to the plain device when QEMU has no virglrenderer: the
       // guest still gets a DRM node and renders with llvmpipe.
-      gpu: process.env.HYPERWAKE_GPU || (this.host.acceleratedGraphics ? 'virtio-gpu-gl-pci' : 'virtio-gpu-pci'),
+      gpu: process.env.MOLA_GPU || (this.host.acceleratedGraphics ? 'virtio-gpu-gl-pci' : 'virtio-gpu-pci'),
       connect_host: '127.0.0.1',
-      guest_endpoint: `http://10.0.2.2:${process.env.HYPERWAKE_PORT || 4141}`,
+      guest_endpoint: `http://10.0.2.2:${process.env.MOLA_PORT || 4141}`,
       // Stock QEMU on HVF needs GICv3; the packaged runtime uses GICv2.
-      gic_version: Number(process.env.HYPERWAKE_GIC || (this.host.acceleratedGraphics ? 2 : 3)),
-      max_running: Number(process.env.HYPERWAKE_MAX_RUNNING || 2),
-      max_memory_mb: Number(process.env.HYPERWAKE_MAX_MEMORY_MB || 8192),
+      gic_version: Number(process.env.MOLA_GIC || (this.host.acceleratedGraphics ? 2 : 3)),
+      max_running: Number(process.env.MOLA_MAX_RUNNING || 2),
+      max_memory_mb: Number(process.env.MOLA_MAX_MEMORY_MB || 8192),
     };
     const path = join(root, 'config.json');
     writeFileSync(path, JSON.stringify(config, null, 2), { mode: 0o600 });
