@@ -75,7 +75,7 @@ if (command === 'mcp') {
 }
 
 if (command !== 'start') {
-  console.log('usage: mola-core [start|doctor|mcp] [--port=4141]');
+  console.log('usage: mola [start|doctor|mcp] [--port=4141]');
   process.exit(1);
 }
 

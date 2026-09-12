@@ -6,7 +6,7 @@
   "license": "FSL-1.1-ALv2",
   "type": "module",
   "bin": {
-    "mola-core": "./bin/mola.js"
+    "mola": "./bin/mola.js"
   },
   "engines": {
     "node": ">=20"

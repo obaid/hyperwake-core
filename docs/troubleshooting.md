@@ -1,6 +1,6 @@
 # Troubleshooting
 
-## `mola-core doctor` says it is not ready
+## `npx mola-core doctor` says it is not ready
 
 It names what is missing. The usual answers:
 

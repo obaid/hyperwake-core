@@ -118,7 +118,7 @@ machine gets one from virtio-gpu.
 It does not need a GPU. With a plain virtio-gpu device the guest renders on the
 CPU through llvmpipe, which is enough for a working desktop. If your QEMU was
 built with virglrenderer, the engine uses `virtio-gpu-gl` instead and rendering
-is accelerated. `mola-core doctor` reports which one you have.
+is accelerated. `npx mola-core doctor` reports which one you have.
 
 The desktop leaves the machine over its own VNC server, which the engine proxies
 to your browser. The QEMU display is not involved.
