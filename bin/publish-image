@@ -194,19 +194,35 @@ def main():
     # before it uploads, a failed part is a part that is simply gone. That
     # happened on a `tls: bad record MAC` and left the published release
     # advertising six parts it did not have.
+    def uploaded_size(name):
+        """What the release actually holds, which is the only thing that counts."""
+        result = subprocess.run(['gh', 'release', 'view', a.tag, '--repo', a.repo,
+                                 '--json', 'assets'], capture_output=True, text=True)
+        if result.returncode != 0:
+            return None
+        for item in json.loads(result.stdout).get('assets', []):
+            if item['name'] == name:
+                return item['size']
+        return None
+
     print(f'Uploading {len(assets)} assets to {a.tag}...', flush=True)
     for asset in assets:
         name = Path(asset).name
+        expected = Path(asset).stat().st_size
         for attempt in range(1, 5):
-            result = subprocess.run(['gh', 'release', 'upload', a.tag, '--repo', a.repo,
-                                     '--clobber', asset], capture_output=True, text=True)
-            if result.returncode == 0:
+            subprocess.run(['gh', 'release', 'upload', a.tag, '--repo', a.repo,
+                            '--clobber', asset], capture_output=True, text=True)
+            # Confirmed against the release rather than against an exit code.
+            # A partial upload is the failure that matters here, and it is the
+            # one an exit code is least likely to tell you about.
+            if uploaded_size(name) == expected:
                 print(f'  {name}', flush=True)
                 break
             if attempt == 4:
-                sys.exit(f'\n{name} failed after 4 attempts: {result.stderr.strip()}\n'
-                         'The release is now incomplete. Re-run this command; it is '
-                         'safe to repeat and will replace whatever is there.')
+                sys.exit(f'\n{name} did not reach the release after 4 attempts.\n'
+                         'The release is now incomplete, so nothing can install from '
+                         'it. Re-run this command; it is safe to repeat and replaces '
+                         'whatever is there.')
             print(f'  {name} attempt {attempt} failed, retrying', flush=True)
             time.sleep(attempt * 5)
 
