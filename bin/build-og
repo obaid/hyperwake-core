@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+"""Draw the social share cards.
+
+The wordmark on the landing page is a bitmap drawn into a canvas, not type, so
+a share card built from a font would be a near-miss rather than the same mark.
+This reads the same glyph grid and the same colour ramp the page uses, which is
+why the constants below are duplicated from site/index.html rather than being
+approximated: if one changes, the other must, and a visible mismatch is the
+reminder.
+
+    bin/build-og            # writes site/og.png and site/og-docs.png
+"""
+import subprocess
+from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFont
+
+ROOT = Path(__file__).resolve().parent.parent
+SITE = ROOT / 'site'
+
+# Facebook, X, LinkedIn and Slack all render 1.91:1. Anything else is cropped
+# by somebody.
+W, H = 1200, 630
+
+GROUND = (17, 28, 24)        # --ground
+CREAM_2 = (227, 214, 168)    # --cream-2
+MUTED = (143, 163, 150)      # --muted
+GREEN = (158, 206, 106)      # --green
+EDGE = (36, 56, 47)          # --edge
+
+LIGHT, MID, DEEP = (233, 247, 201), (158, 206, 106), (47, 74, 51)
+
+GLYPHS = {
+    'M': ['1000001', '1100011', '1010101', '1001001', '1000001', '1000001', '1000001'],
+    'O': ['0111110', '1100011', '1000001', '1000001', '1000001', '1100011', '0111110'],
+    'L': ['1000000', '1000000', '1000000', '1000000', '1000000', '1000011', '1111111'],
+    'A': ['0011100', '0110110', '1100011', '1100011', '1111111', '1100011', '1100011'],
+}
+WORD, GAP, ROWS = 'MOLA', 1, 7
+
+FONTS = Path.home() / 'Library/Fonts'
+
+
+def font(name, size):
+    return ImageFont.truetype(str(FONTS / f'JetBrainsMono-{name}.ttf'), size)
+
+
+def mix(a, b, t):
+    return tuple(round(x + (y - x) * t) for x, y in zip(a, b))
+
+
+def blend(colour, alpha, over=GROUND):
+    """Flatten alpha by hand. The card has no transparency to hand on to."""
+    return tuple(round(o + (c - o) * alpha) for c, o in zip(colour, over))
+
+
+def draw_wordmark(d, left, top, block):
+    x = 0
+    for ch in WORD:
+        glyph = GLYPHS[ch]
+        for r in range(ROWS):
+            for c, bit in enumerate(glyph[r]):
+                if bit != '1':
+                    continue
+                t = r / (ROWS - 1)
+                base = mix(LIGHT, MID, t * 2) if t < 0.5 else mix(MID, DEEP, (t - 0.5) * 2)
+                alpha = 0.88 + ((r * 7 + c * 13 + x) % 5) * 0.03
+                px, py = left + (x + c) * block, top + r * block
+                d.rectangle([px, py, px + block - 1, py + block - 1], fill=blend(base, alpha))
+        x += len(glyph[0]) + GAP
+
+
+def draw_field(d, seed=7):
+    """The hero's drifting squares, held still.
+
+    A deterministic scatter rather than `random`, so rebuilding the card with
+    no source change produces a byte-identical file and git stays quiet.
+    """
+    n = seed
+    for _ in range(150):
+        n = (n * 1103515245 + 12345) & 0x7FFFFFFF
+        x = n % W
+        n = (n * 1103515245 + 12345) & 0x7FFFFFFF
+        y = n % H
+        n = (n * 1103515245 + 12345) & 0x7FFFFFFF
+        size = 4 + (n % 3) * 4
+        alpha = 0.05 + (n % 7) * 0.012
+        d.rectangle([x, y, x + size, y + size], fill=blend(GREEN, alpha))
+
+
+def card(lines, out, block=22):
+    image = Image.new('RGB', (W, H), GROUND)
+    d = ImageDraw.Draw(image)
+    draw_field(d)
+
+    cols = len(WORD) * 7 + (len(WORD) - 1) * GAP
+    mark_w, mark_h = cols * block, ROWS * block
+    top = 148
+    draw_wordmark(d, (W - mark_w) // 2, top, block)
+
+    y = top + mark_h + 74
+    for text, name, size, colour, gap in lines:
+        f = font(name, size)
+        d.text((W / 2, y), text, font=f, fill=colour, anchor='ma')
+        y += size + gap
+
+    # A hairline at the foot, the same edge colour the site uses on its panels.
+    d.rectangle([0, H - 6, W, H], fill=EDGE)
+    image.save(out, optimize=True)
+    return out
+
+
+def main():
+    cards = {
+        SITE / 'og.png': [
+            ('Instant computers your AI agents can see, control, and operate.',
+             'Medium', 26, CREAM_2, 26),
+            ('A full Omarchy desktop on your own machine, driven through an API.',
+             'Regular', 20, MUTED, 38),
+            ('$ npx mola-core', 'Bold', 26, GREEN, 0),
+        ],
+        SITE / 'og-docs.png': [
+            ('Documentation', 'Bold', 34, CREAM_2, 24),
+            ('Install it, drive a machine, wire up MCP, read the API reference.',
+             'Regular', 20, MUTED, 38),
+            ('mola.sh/docs', 'Bold', 26, GREEN, 0),
+        ],
+    }
+    for out, lines in cards.items():
+        card(lines, out)
+        size = out.stat().st_size
+        print(f'{out.relative_to(ROOT)}  {W}x{H}  {size / 1024:.0f} KB')
+    if (pngcrush := subprocess.run(['which', 'oxipng'], capture_output=True)).returncode == 0:
+        for out in cards:
+            subprocess.run(['oxipng', '-q', '-o', '4', str(out)], check=False)
+            print(f'{out.relative_to(ROOT)}  {out.stat().st_size / 1024:.0f} KB after oxipng')
+
+
+if __name__ == '__main__':
+    main()
