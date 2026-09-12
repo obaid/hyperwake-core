@@ -53,6 +53,18 @@ ln -sfn "${omarchy#/guest}" /guest/usr/share/mola/skel/.local/share/omarchy
 #
 # Every home a machine can start from gets stamped, because which one applies
 # depends on whether the factory image shipped a populated /home/dev.
+#
+# The same loop turns idling off. Omarchy covers the screen with a screensaver
+# after 150 seconds without input, and input here means input: a command that
+# runs for three minutes, or a model that thinks for three minutes, is idle as
+# far as the compositor is concerned. The next screenshot then shows a
+# screensaver instead of the desktop, which is a confusing thing to hand an
+# agent that has no idea it went away. omarchy-toggle-idle records the choice
+# as this file, so writing it is the supported way to ask for the same thing.
+#
+# The 300-second screen lock needs no help: it refuses to arm because dev has
+# no password for PAM to check, and Omarchy declines to lock a session that
+# could not then be unlocked.
 migrations_stamped=0
 for home in /guest/usr/share/mola/skel /guest/etc/skel /guest/home/dev; do
   [ -d "$home" ] || continue
@@ -62,12 +74,47 @@ for home in /guest/usr/share/mola/skel /guest/etc/skel /guest/home/dev; do
     touch "$home/.local/state/omarchy/migrations/$(basename "$migration")"
     migrations_stamped=$((migrations_stamped + 1))
   done
+  mkdir -p "$home/.local/state/omarchy/indicators"
+  touch "$home/.local/state/omarchy/indicators/stay-awake"
 done
 chown -R 1000:1000 /guest/home/dev/.local 2>/dev/null || true
 echo "Stamped $migrations_stamped Omarchy migration markers."
 # Fail the build rather than shipping the nag again if upstream moves the
 # directory. Silence here is how 86 pending migrations got baked in.
 test "$migrations_stamped" -gt 0
+
+# Omarchy onboards a human with notifications sent at -u critical, which the
+# freedesktop spec says never expire. A person reads them and clicks them away.
+# Nobody does that here, so they stay on screen for the life of the machine,
+# stacked over the top-right corner of a 1280x800 screen, and every one of them
+# carries an --exec that opens a fullscreen menu or a floating terminal on
+# click. An agent that clicks near that corner gets a full-screen overlay it
+# did not ask for and has no idea how to dismiss.
+#
+# Each of these five asks for something a disposable VM does not have: a
+# wireless card, a fingerprint reader, a microphone, a favourite coding agent,
+# or a reason to run a system update on a machine that is thrown away. The
+# first-run scripts that actually set the desktop up (audio, user units, GTK
+# settings, theme) are left alone.
+#
+# They are emptied rather than deleted. omarchy-provision-first-run names each
+# one literally and treats a non-zero exit as a failed first run, which skips
+# omarchy-done mark and so runs the whole sequence again at every login. A
+# missing file exits 127, so removing these would trade a stuck notification
+# for a first-run loop that never ends.
+onboarding_silenced=0
+for nag in welcome.sh wifi.sh setup-agent.hook install-voxtype.hook setup-fingerprint.hook; do
+  [ -e "$omarchy/install/user/first-run/$nag" ] || continue
+  printf '#!/bin/bash\n# Emptied by Mola: onboarding for a human who is not here.\nexit 0\n' \
+    > "$omarchy/install/user/first-run/$nag"
+  chmod 755 "$omarchy/install/user/first-run/$nag"
+  onboarding_silenced=$((onboarding_silenced + 1))
+done
+echo "Silenced $onboarding_silenced Omarchy onboarding notifications."
+# As with the migrations above: if upstream renames these, fail here rather
+# than quietly shipping a desktop that wedges itself on the first stray click.
+test "$onboarding_silenced" -eq 5
+
 printf '{"family":"omarchy/agent","arch":"aarch64","base":"try-omarchy","compositor":"hyprland"}\n' > /guest/etc/mola/image.json
 mkdir -p /guest/etc/systemd/system/multi-user.target.wants /guest/etc/systemd/network
 ln -sfn /etc/systemd/system/mola.service /guest/etc/systemd/system/multi-user.target.wants/mola.service
