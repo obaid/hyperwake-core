@@ -1,6 +1,6 @@
 # Mola
 
-> Throwaway Linux computers for AI agents. Each machine is a full Arch Linux desktop running Hyprland in its own virtual machine, on the user's own hardware. About one second to create, about seven to become usable. Drive it over a REST API, over MCP, or from the bundled chat app.
+> Throwaway Linux computers for AI agents. Each machine runs Omarchy, the Arch Linux desktop, in its own virtual machine on the user's own hardware. About one second to create, about seven to become usable. Drive it over a REST API, over MCP, or from the bundled chat app.
 
 This file is written for an agent deciding whether to use Mola and then using it.
 Every number below is exact. Docs: https://mola.sh/docs/ · Source: https://github.com/obaid/mola-core
@@ -9,8 +9,9 @@ Every number below is exact. Docs: https://mola.sh/docs/ · Source: https://gith
 
 A local engine (`npx mola-core`) that runs real virtual machines and exposes them
 over `http://127.0.0.1:4141`. Not a container, not a cloud service, not a sandbox
-emulation. Inside a machine you get root, systemd, pacman, a compositor, a
-browser, and a real GPU-less desktop at 1280x800.
+emulation. Inside a machine you get root, systemd, pacman, Omarchy's full
+Hyprland desktop, a browser, and a real screen at 1280x800 rendered in
+software.
 
 Machines are copy-on-write clones of one base image, which is why creating one
 costs about a second rather than a 16 GB copy. Machines share nothing after
