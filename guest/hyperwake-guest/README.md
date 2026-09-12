@@ -1,6 +1,6 @@
 # hyperwake-guest
 
-The daemon that runs inside every Hyperwake machine.
+The daemon that runs inside every Mola machine.
 
 ## What it does
 
@@ -49,7 +49,7 @@ The decoded payload is:
 ```json
 {
   "computer_id": "01a0844a-...",
-  "endpoint": "https://hyperwake.ai",
+  "endpoint": "https://mola.sh",
   "registration_token": "<single use>"
 }
 ```

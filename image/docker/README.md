@@ -1,4 +1,4 @@
-# Hyperwake desktop image (development)
+# Mola desktop image (development)
 
 `hyperwake/desktop:dev` — the machine image the **docker** compute driver
 clones for every computer created on a developer laptop.
@@ -36,7 +36,7 @@ The control plane does not care what distribution an image runs. It requires:
 | no shared secret baked into the image | two clones must never share an identity |
 | identity read from env **or** the SMBIOS serial | Docker and Proxmox inject it differently |
 
-Anything meeting that contract is a valid Hyperwake image.
+Anything meeting that contract is a valid Mola image.
 
 ## Build
 
@@ -90,7 +90,7 @@ where the port lives:
 
 - the container's `5900` is published to `127.0.0.1` on the host, never to a
   routable address;
-- the only thing that connects to it is the Hyperwake desktop gateway;
+- the only thing that connects to it is the Mola desktop gateway;
 - the gateway requires a single-use, 60-second token bound to the owning user,
   which it redeems against the control plane before it opens any TCP socket.
 

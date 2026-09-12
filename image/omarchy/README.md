@@ -28,7 +28,7 @@ display brightness over USB), `ddcutil` (DDC/CI over I2C), `plymouth` (boot
 splash), `bolt` (Thunderbolt authorisation), and the three `cups` printing
 packages.
 
-`wayvnc` is a Hyperwake **addition** — Omarchy assumes a physical screen and
+`wayvnc` is a Mola **addition** — Omarchy assumes a physical screen and
 ships no remote display.
 
 ## The desktop does not run in Docker
