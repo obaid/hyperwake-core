@@ -331,6 +331,12 @@ curl -s -X POST $API/machines \
     </div>
 
     <div class="box">
+      <span class="lbl">Taking it off again</span>
+      <p><code>npx mola-core uninstall</code> deletes every machine and its disk, the guest image, the keys and the token, and tells you how much it freed. It shows you the total and asks first. <code>--keep-image</code> clears the machines but keeps the image, so the next one does not re-download it.</p>
+      <p>It removes only what Mola created. A virtual machine it did not start is left running.</p>
+    </div>
+
+    <div class="box">
       <span class="lbl">Where the engine stores things</span>
       <p>The engine writes its token, keys, guest image, and machine disks to <code>~/.mola</code>. Set <code>MOLA_HOME</code> to move them. That directory sits outside the installed package on purpose: <code>npx</code> clears its cache without warning, and a machine's disk must outlive the tool that created it.</p>
     </div>

@@ -106,3 +106,15 @@ virglrenderer reports `accelerated (virgl)` instead.
 
 Also worth checking: how many machines are running, and whether the host has
 memory left. Each running machine reserves its full `memory_mb`.
+
+## Machines are filling the disk
+
+Each machine's disk grows as it is used, and a guest image is about a gigabyte.
+`npx mola-core uninstall` reports what `~/.mola` occupies before removing it, so
+it doubles as a way to see where the space went.
+
+To clear the machines but keep the image:
+
+```sh
+npx mola-core uninstall --keep-image
+```

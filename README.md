@@ -170,6 +170,20 @@ that made it.
   python/         a private virtualenv for screen capture
 ```
 
+## Removing it
+
+```sh
+npx mola-core uninstall
+```
+
+Deletes every machine and its disk, the guest image, the keys and the token,
+then reports how much it freed. It shows you the total and asks before doing
+anything. `--keep-image` spares the guest image so the next machine does not
+re-download it; `--yes` skips the question.
+
+It only removes what Mola created. A virtual machine it did not start, or a
+directory it does not own, is left alone.
+
 ## Licence
 
 [Functional Source License 1.1](LICENSE.md). Use Mola for anything, at home

@@ -196,6 +196,22 @@ That writes `~/.mola/image`, which is where the engine looks. If you pass a
 different `--output`, set `MOLA_HOME` to match. The script never overwrites
 an existing image, so move the old directory aside to rebuild.
 
+## Removing everything
+
+The engine keeps its state in `~/.mola`, deliberately outside the installed
+package, because `npx` clears its own cache and a machine's disk has to outlive
+the tool that made it. Nothing else will ever reclaim it, so there is a command
+that does:
+
+```sh
+npx mola-core uninstall
+```
+
+It lists what it found and what that occupies, asks once, then deletes the
+machines, their disks, the guest image, the keys and the token. Add
+`--keep-image` to keep the image and clear only the machines, or `--yes` to skip
+the question.
+
 ## Connecting an agent
 
 There is no agent endpoint yet. Today you give your agent the address and token

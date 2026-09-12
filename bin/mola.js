@@ -74,8 +74,19 @@ if (command === 'mcp') {
   process.exit(0);
 }
 
+if (command === 'uninstall') {
+  const { uninstall } = await import('../src/uninstall.js');
+  const result = await uninstall({
+    yes: process.argv.includes('--yes') || process.argv.includes('-y'),
+    keepImage: process.argv.includes('--keep-image'),
+    colour: { bold, dim, red, green },
+  });
+  process.exit(result.removed ? 0 : 1);
+}
+
 if (command !== 'start') {
-  console.log('usage: mola [start|doctor|mcp] [--port=4141]');
+  console.log('usage: mola [start|doctor|mcp|uninstall] [--port=4141]');
+  console.log('       mola uninstall [--yes] [--keep-image]');
   process.exit(1);
 }
 
