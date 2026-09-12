@@ -120,6 +120,14 @@ start_display() {
     chown dev:dev /run/user/1000
     chmod 700 /run/user/1000
 
+    # Somewhere for the session to put Hyprland's log that is not the runtime
+    # tmpfs. The session runs as `dev` and cannot create this under /var
+    # itself. See the log containment section of hyperwake-session: without a
+    # writable directory here the compositor's log fills /run/user/1000 and the
+    # machine silently loses the ability to launch graphical applications.
+    mkdir -p /var/log/hyperwake
+    chown dev:dev /var/log/hyperwake
+
     groupadd -f seat
     usermod -aG seat dev 2>/dev/null || true
 

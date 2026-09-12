@@ -42,6 +42,32 @@ cp -a "$omarchy/config/." /guest/usr/share/hyperwake/skel/.config/
 # Use an unscaled remote desktop; this is only copied on first boot.
 sed -i -e 's/local omarchy_gdk_scale = 2/local omarchy_gdk_scale = 1/' -e 's/local omarchy_monitor_scale = "auto"/local omarchy_monitor_scale = 1/' /guest/usr/share/hyperwake/skel/.config/hypr/monitors.lua
 ln -sfn "${omarchy#/guest}" /guest/usr/share/hyperwake/skel/.local/share/omarchy
+
+# A machine built from this image is a new Omarchy install, not an upgrade of
+# an older one. omarchy-migrate cannot tell the difference: it lists every
+# migration under $OMARCHY_PATH/migrations that has no marker in
+# ~/.local/state/omarchy/migrations, so a brand-new machine reports every
+# migration in the image as pending and the desktop keeps asking about changes
+# it already has. Stamping them records what the image already contains, which
+# is exactly what an in-place upgrade to this version would have left behind.
+#
+# Every home a machine can start from gets stamped, because which one applies
+# depends on whether the factory image shipped a populated /home/dev.
+migrations_stamped=0
+for home in /guest/usr/share/hyperwake/skel /guest/etc/skel /guest/home/dev; do
+  [ -d "$home" ] || continue
+  mkdir -p "$home/.local/state/omarchy/migrations"
+  for migration in "$omarchy"/migrations/*.sh; do
+    [ -f "$migration" ] || continue
+    touch "$home/.local/state/omarchy/migrations/$(basename "$migration")"
+    migrations_stamped=$((migrations_stamped + 1))
+  done
+done
+chown -R 1000:1000 /guest/home/dev/.local 2>/dev/null || true
+echo "Stamped $migrations_stamped Omarchy migration markers."
+# Fail the build rather than shipping the nag again if upstream moves the
+# directory. Silence here is how 86 pending migrations got baked in.
+test "$migrations_stamped" -gt 0
 printf '{"family":"omarchy/agent","arch":"aarch64","base":"try-omarchy","compositor":"hyprland"}\n' > /guest/etc/hyperwake/image.json
 mkdir -p /guest/etc/systemd/system/multi-user.target.wants /guest/etc/systemd/network
 ln -sfn /etc/systemd/system/hyperwake.service /guest/etc/systemd/system/multi-user.target.wants/hyperwake.service

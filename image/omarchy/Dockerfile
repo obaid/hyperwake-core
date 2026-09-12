@@ -94,6 +94,23 @@ RUN mkdir -p /usr/share/hyperwake/skel \
  && cp -r /usr/share/omarchy/config/. /usr/share/hyperwake/skel/.config/ 2>/dev/null || true \
  && mkdir -p /usr/share/hyperwake/skel/.config
 
+# A machine built from this image is a new install, not an upgrade. Without
+# markers, omarchy-migrate reports every migration in the pinned tag as pending
+# (104 on v4.0.3) and the desktop keeps asking about changes that are already
+# in the image. Stamping them is what an in-place upgrade to this
+# version would have left behind. The final test fails the build rather than
+# silently shipping the nag again if upstream moves the directory.
+RUN set -eux; \
+    mkdir -p /usr/share/hyperwake/skel/.local/state/omarchy/migrations; \
+    count=0; \
+    for migration in /usr/share/omarchy/migrations/*.sh; do \
+      [ -f "$migration" ] || continue; \
+      touch "/usr/share/hyperwake/skel/.local/state/omarchy/migrations/$(basename "$migration")"; \
+      count=$((count + 1)); \
+    done; \
+    echo "stamped $count Omarchy migrations"; \
+    test "$count" -gt 0
+
 COPY rootfs/ /
 COPY bin/hyperwake-guest-amd64 /usr/local/bin/hyperwake-guest
 
