@@ -155,20 +155,6 @@
   @keyframes blink { to { opacity: 0; } }
   @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
 
-  /* ---------------- numbers strip ---------------- */
-  .numbers {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    border: 1px solid var(--edge); border-radius: 4px; overflow: hidden;
-    margin-top: 3.5rem; background: var(--raise);
-  }
-  .numbers div { padding: 1.1rem 1.2rem; border-right: 1px solid var(--edge); }
-  .numbers div:last-child { border-right: none; }
-  .numbers b {
-    display: block; font-size: 1.65rem; font-weight: 800; color: var(--green);
-    letter-spacing: -0.03em; line-height: 1.1;
-  }
-  .numbers span { font-size: 0.76rem; color: var(--muted); }
-
   /* ---------------- sections ---------------- */
   section { padding: 4.5rem 0 0; }
   h2 {
