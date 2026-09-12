@@ -43,13 +43,19 @@ function progress(label, done, total) {
  * least reliable thing in the chain. Splitting also means a failed download
  * retries one part rather than the whole image.
  */
-async function* artifactBytes(artifact, onChunk) {
+async function* artifactBytes(artifact, onChunk, base) {
   const parts = artifact.parts ?? [{ url: artifact.url, bytes: artifact.bytes }];
   for (const [index, part] of parts.entries()) {
+    // Resolved against the manifest's own URL, so a bundle works from wherever
+    // it is served. A published manifest names absolute release URLs and this
+    // returns them unchanged; a manifest that names bare filenames resolves
+    // them beside itself, which is what makes a local mirror or an offline
+    // copy work without rewriting anything.
+    const url = new URL(part.url, base).toString();
     let response;
     for (let attempt = 1; ; attempt += 1) {
       try {
-        response = await fetch(part.url, { redirect: 'follow' });
+        response = await fetch(url, { redirect: 'follow' });
         if (response.ok) break;
         throw new Error(`HTTP ${response.status}`);
       } catch (error) {
@@ -70,7 +76,7 @@ async function* artifactBytes(artifact, onChunk) {
  * The digest covers the whole compressed stream across every part, so a
  * truncated or tampered download fails before anything moves into place.
  */
-async function fetchArtifact(artifact, into) {
+async function fetchArtifact(artifact, into, base) {
   const total = artifact.bytes
     ?? (artifact.parts ?? []).reduce((sum, part) => sum + (part.bytes ?? 0), 0);
   const digest = createHash('sha256');
@@ -80,7 +86,7 @@ async function fetchArtifact(artifact, into) {
     digest.update(chunk);
     seen += chunk.length;
     progress(artifact.name, seen, total);
-  }));
+  }, base));
 
   const target = join(into, artifact.name);
   const stages = artifact.compression === 'zstd'
@@ -128,7 +134,7 @@ export async function downloadImage({ url = manifestUrl(), log = console.log } =
 
   try {
     for (const artifact of manifest.artifacts) {
-      await fetchArtifact(artifact, staging);
+      await fetchArtifact(artifact, staging, url);
     }
     rmSync(final, { recursive: true, force: true });
     renameSync(staging, final);

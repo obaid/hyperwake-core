@@ -138,6 +138,23 @@ def main():
     manifest = {'version': version, 'artifacts': artifacts}
     (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 
+    # The same bundle addressed by bare filename. The engine resolves artifact
+    # URLs against the manifest it fetched, so this one works from wherever the
+    # directory is served: a local http server while testing, a mirror, a USB
+    # stick. The published manifest keeps absolute release URLs, because an
+    # engine older than that resolving step still has to be able to read it.
+    def relative(artifact):
+        copy = dict(artifact)
+        if 'url' in copy:
+            copy['url'] = copy['url'].rsplit('/', 1)[-1]
+        if 'parts' in copy:
+            copy['parts'] = [{**part, 'url': part['url'].rsplit('/', 1)[-1]}
+                             for part in copy['parts']]
+        return copy
+
+    (out / 'manifest.local.json').write_text(
+        json.dumps({'version': version, 'artifacts': [relative(a) for a in artifacts]}, indent=2) + '\n')
+
     total = sum(x['bytes'] for x in artifacts)
     print(f'\nBundle ready in {out}')
     for x in artifacts:
@@ -147,7 +164,7 @@ def main():
     if not a.tag:
         print('\nNo --tag given, so nothing was uploaded.')
         print(f'Test it locally:\n  (cd {out} && python3 -m http.server 8910)')
-        print('  MOLA_IMAGE_URL=http://127.0.0.1:8910/manifest.json npx mola-core')
+        print('  MOLA_IMAGE_URL=http://127.0.0.1:8910/manifest.local.json npx mola-core')
         return
 
     if not shutil.which('gh'):
