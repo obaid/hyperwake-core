@@ -1,0 +1,302 @@
+  /* Omarchy's world: deep green-black, warm cream, one green that does the work.
+     Committed to a single dark theme, like the OS it runs. Every colour painted. */
+  :root {
+    --void:    #0b120f;
+    --ground:  #111c18;
+    --raise:   #17251f;
+    --raise-2: #1d2e27;
+    --edge:    #24382f;
+    --edge-lit:#38564a;
+
+    --cream:   #f7e8b2;
+    --cream-2: #e3d6a8;
+    --muted:   #8fa396;
+    --dim:     #5f7468;
+
+    --green:   #9ece6a;
+    --green-lo:#678549;
+    --green-hi:#daecc6;
+    --amber:   #e0af68;
+    --rose:    #f7768e;
+
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--cream);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--green); color: var(--void); }
+
+  a { color: var(--green); text-decoration: none; border-bottom: 1px solid var(--green-lo); }
+  a:hover { color: var(--green-hi); border-bottom-color: var(--green-hi); }
+  a:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; }
+
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* ---------------- top bar ---------------- */
+  .bar {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--ground) 92%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--edge);
+  }
+  .bar .wrap { display: flex; align-items: center; gap: 1.5rem; height: 54px; }
+  .bar .mark {
+    font-weight: 800; letter-spacing: -0.04em; color: var(--cream);
+    border: none; text-decoration: none;
+  }
+  .bar a.mark:hover { color: var(--green); }
+  .bar .mark b { color: var(--green); }
+  .bar nav { display: flex; gap: 1.1rem; margin-left: auto; font-size: 0.8rem; overflow-x: auto; }
+  .bar nav a { color: var(--muted); border: none; white-space: nowrap; }
+  .bar nav a:hover { color: var(--green); }
+
+  /* ---------------- hero ---------------- */
+  .hero { padding: 5rem 0 3.5rem; text-align: center; position: relative; }
+
+  /* The drifting pixel field sits behind the hero and never catches a click. */
+  #pixelfield {
+    position: absolute; inset: -2rem 0 0; width: 100%; height: calc(100% + 2rem);
+    pointer-events: none; z-index: 0;
+  }
+  .hero > *:not(#pixelfield) { position: relative; z-index: 1; }
+
+  .wordmark {
+    margin: 0;
+    line-height: 0;
+    filter: drop-shadow(0 0 60px rgba(158, 206, 106, 0.16));
+  }
+  #wordmark {
+    /* Drawn at device resolution and scaled down, so the blocks stay crisp
+       rather than resampling into mush on a Retina display. */
+    width: min(92%, 42rem); height: auto; display: inline-block;
+    image-rendering: pixelated;
+  }
+
+  .pitch {
+    font-size: clamp(1.1rem, 3.2vw, 1.65rem);
+    font-weight: 700;
+    color: var(--cream);
+    margin: 1.75rem auto 0;
+    max-width: 46ch;
+    line-height: 1.3;
+    text-wrap: balance;
+  }
+  .sub {
+    color: var(--muted);
+    margin: 1rem auto 0;
+    max-width: 56ch;
+    font-size: 0.95rem;
+  }
+
+  .cta { display: flex; gap: 0.7rem; justify-content: center; flex-wrap: wrap; margin-top: 2rem; }
+  .btn {
+    font-family: var(--mono); font-size: 0.88rem; font-weight: 500;
+    padding: 0.6rem 1.15rem; border-radius: 3px; border: 1px solid var(--green);
+    background: var(--green); color: var(--void); border-bottom-width: 1px;
+  }
+  .btn:hover { background: var(--green-hi); border-color: var(--green-hi); color: var(--void); }
+  .btn.ghost { background: transparent; color: var(--green); }
+  .btn.ghost:hover { background: rgba(158,206,106,0.1); color: var(--green-hi); }
+
+  /* Announced, visible, and plainly not ready. A span, not a link, so there is
+     nothing to click and nothing for a keyboard to land on. */
+  .btn.disabled {
+    cursor: not-allowed; opacity: 0.55;
+    border-color: var(--line); color: var(--muted);
+    display: inline-flex; align-items: baseline; gap: 0.5rem;
+  }
+  .btn.disabled:hover { background: transparent; color: var(--muted); border-color: var(--line); }
+  .btn.disabled em {
+    font-style: normal; font-size: 0.78em; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--green-lo);
+  }
+
+  /* ---------------- terminal ---------------- */
+  .term {
+    margin: 2.75rem auto 0; max-width: 640px; text-align: left;
+    background: var(--void); border: 1px solid var(--edge);
+    border-radius: 5px; overflow: hidden;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+  }
+  .term .chrome {
+    display: flex; align-items: center; gap: 0.45rem;
+    padding: 0.55rem 0.8rem; background: var(--raise); border-bottom: 1px solid var(--edge);
+  }
+  .term .chrome i { width: 9px; height: 9px; border-radius: 50%; background: var(--edge-lit); }
+  .term .chrome i:first-child { background: var(--rose); }
+  .term .chrome i:nth-child(2) { background: var(--amber); }
+  .term .chrome i:nth-child(3) { background: var(--green); }
+  .term .chrome span { margin-left: auto; font-size: 0.68rem; color: var(--dim); }
+  .term pre {
+    margin: 0; padding: 1rem 1.1rem; font-size: 0.8rem; line-height: 1.75;
+    overflow-x: auto; color: var(--cream-2);
+    background: var(--void); border: none; border-radius: 0;
+  }
+  .term .p { color: var(--green); }
+  .term .d { color: var(--dim); }
+  .term .g { color: var(--green); }
+  .term .a { color: var(--amber); }
+  .cursor {
+    display: inline-block; width: 0.55em; height: 1em; background: var(--green);
+    vertical-align: -0.15em; animation: blink 1.1s steps(2, start) infinite;
+  }
+  @keyframes blink { to { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+
+  /* ---------------- numbers strip ---------------- */
+  .numbers {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    border: 1px solid var(--edge); border-radius: 4px; overflow: hidden;
+    margin-top: 3.5rem; background: var(--raise);
+  }
+  .numbers div { padding: 1.1rem 1.2rem; border-right: 1px solid var(--edge); }
+  .numbers div:last-child { border-right: none; }
+  .numbers b {
+    display: block; font-size: 1.65rem; font-weight: 800; color: var(--green);
+    letter-spacing: -0.03em; line-height: 1.1;
+  }
+  .numbers span { font-size: 0.76rem; color: var(--muted); }
+
+  /* ---------------- sections ---------------- */
+  section { padding: 4.5rem 0 0; }
+  h2 {
+    font-size: 1.45rem; font-weight: 800; letter-spacing: -0.025em; margin: 0;
+    color: var(--cream); scroll-margin-top: 5rem;
+  }
+  h2::before { content: "> "; color: var(--green); font-weight: 400; }
+  h3 { font-size: 0.98rem; font-weight: 700; margin: 2rem 0 0; color: var(--cream); }
+  p { margin: 0.9rem 0 0; max-width: 70ch; color: var(--cream-2); }
+  p.lede { color: var(--muted); margin-top: 0.7rem; }
+  ul { margin: 0.9rem 0 0; padding-left: 1.2rem; max-width: 70ch; color: var(--cream-2); }
+  li { margin-top: 0.35rem; }
+  li::marker { color: var(--green-lo); }
+  strong { color: var(--cream); font-weight: 700; }
+  em { color: var(--green-hi); font-style: normal; }
+
+  code {
+    font-family: var(--mono); font-size: 0.87em;
+    background: var(--raise-2); color: var(--green-hi);
+    padding: 0.1em 0.36em; border-radius: 3px;
+  }
+  pre {
+    margin: 1rem 0 0; background: var(--void); border: 1px solid var(--edge);
+    border-left: 2px solid var(--green-lo); border-radius: 4px;
+    padding: 0.9rem 1.05rem; overflow-x: auto; font-size: 0.8rem; line-height: 1.7;
+    color: var(--cream-2);
+  }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  pre .d { color: var(--dim); }
+  pre .g { color: var(--green); }
+  pre .a { color: var(--amber); }
+
+  /* ---------------- steps ---------------- */
+  .steps { counter-reset: s; margin-top: 1.5rem; }
+  .step { display: flex; gap: 1rem; margin-top: 2rem; }
+  .step::before {
+    counter-increment: s; content: counter(s);
+    flex: 0 0 auto; width: 1.75rem; height: 1.75rem; margin-top: 0.15rem;
+    display: grid; place-items: center; border-radius: 3px;
+    background: var(--raise-2); border: 1px solid var(--edge-lit);
+    color: var(--green); font-size: 0.78rem; font-weight: 700;
+  }
+  .step > div { min-width: 0; flex: 1; }
+  .step h3 { margin-top: 0; }
+
+  /* ---------------- callouts ---------------- */
+  .box {
+    margin-top: 1.3rem; border: 1px solid var(--edge); border-radius: 4px;
+    background: var(--raise); padding: 1rem 1.2rem; max-width: 70ch;
+  }
+  .box.hot { border-color: var(--amber); background: rgba(224,175,104,0.07); }
+  .box .lbl {
+    display: block; font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--green); margin-bottom: 0.4rem; font-weight: 700;
+  }
+  .box.hot .lbl { color: var(--amber); }
+  .box p { margin: 0; font-size: 0.9rem; }
+  .box p + p { margin-top: 0.6rem; }
+
+  /* ---------------- tables ---------------- */
+  .scroll { overflow-x: auto; margin-top: 1.2rem; border: 1px solid var(--edge); border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.83rem; background: var(--raise); }
+  th, td { text-align: left; padding: 0.55rem 0.9rem; border-bottom: 1px solid var(--edge); vertical-align: top; }
+  thead th {
+    font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--dim); background: var(--void); white-space: nowrap; font-weight: 500;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.k { color: var(--green-hi); white-space: nowrap; }
+  td { color: var(--cream-2); }
+
+  footer {
+    margin-top: 5rem; padding: 2rem 0 4rem; border-top: 1px solid var(--edge);
+    color: var(--dim); font-size: 0.8rem;
+  }
+  footer p { color: var(--dim); max-width: 70ch; }
+  footer a { border-bottom-color: var(--edge-lit); }
+
+/* --- docs layout ----------------------------------------------------------- */
+
+/* Two columns on the docs page only. The landing page never loads this shape. */
+.docs {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: 3rem;
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky; top: 4.2rem;
+  max-height: calc(100vh - 5.5rem);
+  overflow-y: auto;
+  padding: 2rem 0 3rem;
+  border-right: 1px solid var(--line);
+}
+.sidebar ol { list-style: none; margin: 0; padding: 0 1.25rem 0 0; }
+.sidebar > ol > li { margin-bottom: 0.15rem; }
+.sidebar a {
+  display: block; padding: 0.3rem 0.6rem;
+  color: var(--muted); text-decoration: none;
+  /* Reset the prose underline before adding the indicator rail. */
+  border: 0; border-left: 2px solid transparent; border-radius: 0 3px 3px 0;
+}
+.sidebar a:hover { color: var(--cream); background: rgba(158, 206, 106, 0.05); }
+/* The section currently under the reader, set by the scrollspy below. */
+.sidebar a.here { color: var(--green); border-left-color: var(--green); background: rgba(158, 206, 106, 0.07); }
+.sidebar .sub { padding-left: 0.9rem; }
+.sidebar .sub a { font-size: 0.92em; }
+.sidebar .away { margin-top: 1.1rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
+
+.docs-body { padding: 2rem 0 4rem; min-width: 0; }
+.docs-body > section:first-child { padding-top: 0; }
+
+@media (max-width: 860px) {
+  .docs { grid-template-columns: 1fr; gap: 0; }
+  .sidebar {
+    position: static; max-height: none; border-right: 0;
+    border-bottom: 1px solid var(--line); padding: 1rem 0;
+  }
+  .sidebar ol { display: flex; flex-wrap: wrap; gap: 0.25rem; padding: 0; }
+  .sidebar .sub { padding-left: 0; }
+  .sidebar .away { margin: 0; padding: 0; border: 0; }
+  .sidebar a { border-left: 0; border-radius: 3px; }
+  .sidebar a.here { border-left: 0; }
+}
+
+/* --- landing ---------------------------------------------------------------- */
+
+.lead-in { text-align: center; padding: 1rem 0 4rem; }
+.lead-in p { color: var(--muted); margin: 0 auto; max-width: 46ch; }
+.lead-in a { color: var(--green); }

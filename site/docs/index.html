@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mola docs</title>
+<meta name="description" content="How to install Mola, control a machine, drive it from an agent over MCP, and every endpoint in the API.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%23111c18'/><rect x='3' y='4' width='10' height='8' fill='%239ece6a'/></svg>">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div class="bar">
+  <div class="wrap">
+    <a class="mark" href="/">mola<b>.</b></a>
+    <nav>
+      <a href="/">Home</a>
+      <a href="https://github.com/obaid/mola-core">GitHub</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="docs">
+
+    <nav class="sidebar" aria-label="Documentation">
+      <ol>
+        <li><a href="#what">Intro</a></li>
+        <li><a href="#start">Installation</a>
+          <ol class="sub"><li><a href="#build">Build your own image</a></li></ol>
+        </li>
+        <li><a href="#drive">Control</a>
+          <ol class="sub"><li><a href="#states">Machine states</a></li></ol>
+        </li>
+        <li><a href="#mcp">MCP</a></li>
+        <li><a href="#api">API reference</a></li>
+        <li><a href="#trouble">Troubleshooting</a></li>
+        <li class="away"><a href="https://github.com/obaid/mola-core">GitHub &#8599;</a></li>
+      </ol>
+    </nav>
+
+    <main class="docs-body">
+<section id="what">
+    <h2>Intro</h2>
+    <p>Each machine boots Arch Linux with Hyprland under your platform's hypervisor. You get root, systemd, pacman, a compositor, and a browser. Install what you need. If you break the machine, delete it and create another.</p>
+    <p>The engine clones every machine from one base image using copy-on-write. A new machine therefore costs about a second and a few megabytes rather than a 16 GB copy. Machines share nothing after creation.</p>
+    <p>The engine listens on loopback only. You do not create an account, and no hosted service sits in the middle. Your data stays on your computer unless you send it elsewhere.</p>
+  </section>
+<section id="start">
+    <h2>Installation</h2>
+    <p class="lede">Two commands on macOS. One on Linux, if you already installed QEMU.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div>
+          <h3>Install QEMU</h3>
+<pre><code>brew install qemu        <span class="d"># macOS, Apple Silicon</span>
+sudo pacman -S qemu-full <span class="d"># Linux, and check /dev/kvm exists</span></code></pre>
+          <p>Any QEMU build works. QEMU applies the macOS hypervisor entitlement to itself when it builds, so you need no Developer ID and no separate runtime.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div>
+          <h3>Start the engine</h3>
+<pre><code>npx mola-core</code></pre>
+          <p>The first run downloads a 1.1 GB guest image and verifies its checksums as the bytes arrive. Expect a few minutes. The engine then prints an address and a token, and stays in the foreground until you stop it.</p>
+          <p>To check your machine first, run <code>npx mola-core doctor</code>. It tests each requirement and names whatever is missing.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div>
+          <h3>Create a machine</h3>
+<pre><code><span class="d">export</span> API=http://127.0.0.1:4141/v1
+<span class="d">export</span> TOKEN=$(cat ~/.mola/token)
+
+curl -s -X POST $API/machines \
+  -H <span class="a">"Authorization: Bearer $TOKEN"</span> \
+  -H <span class="a">'content-type: application/json'</span> \
+  -d <span class="a">'{"name": "scratch"}'</span></code></pre>
+          <p>A machine gets 4 vCPU, 4 GB of memory, and a 40 GB disk by default. Set <code>vcpus</code>, <code>memory_mb</code>, or <code>disk_gb</code> to change that. The response returns <code>booting</code>. The machine reaches <code>ready</code> about seven seconds later.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="box">
+      <span class="lbl">Taking it off again</span>
+      <p><code>npx mola-core uninstall</code> deletes every machine and its disk, the guest image, the keys and the token, and tells you how much it freed. It shows you the total and asks first. <code>--keep-image</code> clears the machines but keeps the image, so the next one does not re-download it.</p>
+      <p>It removes only what Mola created. A virtual machine it did not start is left running.</p>
+    </div>
+
+    <div class="box">
+      <span class="lbl">Where the engine stores things</span>
+      <p>The engine writes its token, keys, guest image, and machine disks to <code>~/.mola</code>. Set <code>MOLA_HOME</code> to move them. That directory sits outside the installed package on purpose: <code>npx</code> clears its cache without warning, and a machine's disk must outlive the tool that created it.</p>
+    </div>
+  </section>
+<section id="build">
+    <h2>Build your own guest image</h2>
+    <p class="lede">Most people use the downloaded image. Build your own to change the package set, or to avoid the download.</p>
+
+<pre><code>git clone https://github.com/obaid/mola-core
+cd mola-core && npm install
+python3 bin/native-prepare --output ~/.mola</code></pre>
+    <p>The script writes <code>~/.mola/image</code>, where the engine looks for it. If you pass a different <code>--output</code>, set <code>MOLA_HOME</code> to match. The script never overwrites an existing image, so move the old directory aside to rebuild.</p>
+  </section>
+<section id="drive">
+    <h2>Control</h2>
+    <p class="lede">Send one action per request to <code>POST /v1/machines/{id}/actions</code>. The engine accepts nine.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Verb</th><th>Body</th><th>What you get</th></tr></thead>
+        <tbody>
+          <tr><td class="k">exec</td><td><code>{"command": "ls ~"}</code></td><td>exit code, stdout, stderr</td></tr>
+          <tr><td class="k">read_file</td><td><code>{"path": "~/notes.md"}</code></td><td>base64 bytes and size</td></tr>
+          <tr><td class="k">write_file</td><td><code>{"path": "~/a", "content": "hi\n"}</code></td><td>bytes written</td></tr>
+          <tr><td class="k">screenshot</td><td><code>{}</code></td><td>a PNG, base64</td></tr>
+          <tr><td class="k">click</td><td><code>{"x": 640, "y": 400}</code></td><td>ok</td></tr>
+          <tr><td class="k">move</td><td><code>{"x": 640, "y": 400}</code></td><td>ok</td></tr>
+          <tr><td class="k">scroll</td><td><code>{"direction": "down"}</code></td><td>ok</td></tr>
+          <tr><td class="k">type</td><td><code>{"text": "hello"}</code></td><td>ok</td></tr>
+          <tr><td class="k">key</td><td><code>{"key": "super-return"}</code></td><td>ok</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Open a terminal and run a command</h3>
+<pre><code>curl -X POST $API/machines/$ID/actions -H <span class="a">"Authorization: Bearer $TOKEN"</span> \
+  -d <span class="a">'{"action": "key", "key": "super-return"}'</span>
+
+curl -X POST $API/machines/$ID/actions -H <span class="a">"Authorization: Bearer $TOKEN"</span> \
+  -d <span class="a">'{"action": "type", "text": "fastfetch"}'</span>
+
+curl -X POST $API/machines/$ID/actions -H <span class="a">"Authorization: Bearer $TOKEN"</span> \
+  -d <span class="a">'{"action": "key", "key": "enter"}'</span></code></pre>
+    <p>Those keys are Omarchy's own bindings. <code>super-return</code> opens a terminal, <code>super-space</code> opens the launcher, and <code>super-k</code> lists every binding.</p>
+
+    <h3>Watch the screen</h3>
+<pre><code>curl -X POST $API/machines/$ID/desktop -H <span class="a">"Authorization: Bearer $TOKEN"</span>
+
+<span class="d">{"data": {"desktop_url": "http://127.0.0.1:4141/desktop#t=...", "expires_in": 60}}</span></code></pre>
+    <p>Open that URL in a browser to see the live desktop. The mouse and keyboard work. The ticket travels in the URL fragment, which browsers never send to a server, so it stays out of access logs and referrer headers. Each ticket works once and expires after 60 seconds.</p>
+  </section>
+<section id="states">
+    <h2>Machine states</h2>
+    <p class="lede">A machine reports one of four states. Two of them need explanation.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Status</th><th>Means</th></tr></thead>
+        <tbody>
+          <tr><td class="k">booting</td><td>QEMU is running, the guest has not reported in for this boot</td></tr>
+          <tr><td class="k">ready</td><td>the guest reported in and its shell works</td></tr>
+          <tr><td class="k">stopped</td><td>off, disk intact</td></tr>
+          <tr><td class="k">unknown</td><td>the runtime cannot see it</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p><code>ready</code> does not mean "the process started". QEMU can run while the guest still starts its network or its compositor. The engine waits for a heartbeat from the current boot before it reports <code>ready</code>. Your first command therefore reaches a machine that can answer it.</p>
+
+    <p><code>unknown</code> reports that the runtime cannot see the machine. The engine returns it instead of guessing. A runtime that cannot see a machine has not reported that the machine stopped, and a platform that treats those two answers as the same loses track of machines it still runs.</p>
+
+    <div class="box">
+      <span class="lbl">The engine does not trust the guest</span>
+      <p>Whoever uses a machine has root inside it. The engine therefore treats everything a guest reports as a claim about itself rather than a fact about the platform. It records the capabilities a guest reports, then decides readiness on its own.</p>
+    </div>
+
+    <div class="box">
+      <span class="lbl">A failed delete keeps the record</span>
+      <p>A delete that cannot tear a machine down returns 502 and keeps the machine registered, with the reason attached, so you can retry. Dropping the record instead would leave a virtual machine consuming memory that you could no longer name or stop.</p>
+    </div>
+  </section>
+<section id="mcp">
+    <h2>MCP</h2>
+    <p class="lede">The engine ships an MCP server, so Claude Code, Claude Desktop, Cursor and anything else that speaks MCP can drive a machine. You write config, not code.</p>
+
+<pre><code>claude mcp add mola -- npx -y mola-core mcp</code></pre>
+
+    <p>Or, for a client that wants JSON:</p>
+
+<pre><code>{
+  <span class="g">"mcpServers"</span>: {
+    <span class="g">"mola"</span>: {
+      <span class="g">"command"</span>: <span class="a">"npx"</span>,
+      <span class="g">"args"</span>: [<span class="a">"-y"</span>, <span class="a">"mola-core"</span>, <span class="a">"mcp"</span>]
+    }
+  }
+}</code></pre>
+
+    <p>Then ask for something that needs a computer.</p>
+
+    <div class="term">
+      <div class="chrome"><i></i><i></i><i></i><span>claude</span></div>
+<pre><span class="p">&gt;</span> make me a linux machine, install neovim, and show me the desktop
+
+  <span class="d">create_machine</span>   ready in 7s
+  <span class="d">start_task</span>       pacman -S neovim
+  <span class="d">check_task</span>       downloading... installed
+  <span class="d">open_desktop</span>     http://127.0.0.1:4141/desktop#t=...
+
+  <span class="g">Done.</span> neovim 0.11.4 is installed. The link opens the live
+  desktop, and it expires in a minute.</pre>
+    </div>
+
+    <p>Seventeen tools: machines, the shell, files and the screen. <code>screenshot</code> hands the agent a picture of the desktop, which is what lets a model that has never heard of Mola look at a window and click the right thing.</p>
+
+    <div class="box">
+      <span class="lbl">Two things the tools get right for you</span>
+      <p><code>run_command</code> stops at 120 seconds, so installs and builds go through <code>start_task</code>, which detaches the process and returns a handle to poll. That is also how the agent reports progress instead of going quiet for four minutes.</p>
+      <p>The engine has to be running. If it is not, the tools say so and name the command, rather than failing in a way that looks like a broken server.</p>
+    </div>
+
+    <p><a href="https://github.com/obaid/mola-core/blob/main/docs/mcp.md">Full MCP setup</a>, including Claude Desktop, Cursor, and what to do when something goes wrong.</p>
+  </section>
+<section id="api">
+    <h2>API reference</h2>
+    <p class="lede">Send <code>Authorization: Bearer &lt;token&gt;</code> with every request under <code>/v1</code>. <code>GET /v1</code> returns the endpoint list, so an agent can discover the API itself.</p>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Endpoint</th><th>Does</th></tr></thead>
+        <tbody>
+          <tr><td class="k">POST /v1/machines</td><td>make one and start it</td></tr>
+          <tr><td class="k">GET /v1/machines</td><td>list them</td></tr>
+          <tr><td class="k">GET /v1/machines/{id}</td><td>describe one</td></tr>
+          <tr><td class="k">POST /v1/machines/{id}/start</td><td>start a stopped one</td></tr>
+          <tr><td class="k">POST /v1/machines/{id}/stop</td><td>shut down, <code>{"force": true}</code> cuts power</td></tr>
+          <tr><td class="k">POST /v1/machines/{id}/actions</td><td>do something inside it</td></tr>
+          <tr><td class="k">POST /v1/machines/{id}/desktop</td><td>a browser URL for the screen</td></tr>
+          <tr><td class="k">DELETE /v1/machines/{id}</td><td>destroy it and its disk</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Environment</h3>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Variable</th><th>Default</th><th>Does</th></tr></thead>
+        <tbody>
+          <tr><td class="k">MOLA_HOME</td><td>~/.mola</td><td>token, keys, images, machine disks</td></tr>
+          <tr><td class="k">MOLA_PORT</td><td>4141</td><td>listen port</td></tr>
+          <tr><td class="k">MOLA_QEMU</td><td>found on PATH</td><td>use a particular QEMU</td></tr>
+          <tr><td class="k">MOLA_IMAGE_URL</td><td>GitHub release</td><td>where the guest image comes from</td></tr>
+          <tr><td class="k">MOLA_MAX_RUNNING</td><td>2</td><td>how many may run at once</td></tr>
+          <tr><td class="k">MOLA_MAX_MEMORY_MB</td><td>8192</td><td>memory they may reserve between them</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<section id="trouble">
+    <h2>Troubleshooting</h2>
+
+    <h3>doctor reports that the host is not ready</h3>
+    <p>Read the line it names. On macOS, run <code>brew install qemu</code>. On Linux, check that <code>/dev/kvm</code> exists and that your user can open it. Inside a cloud VM, your provider must expose nested virtualisation, and many do not.</p>
+
+    <h3>A machine never reaches ready</h3>
+<pre><code>tail -40 ~/.mola/runtime/machines/&lt;id&gt;/console.log</code></pre>
+    <p><code>HVF does not support GICv2 emulation</code> means your QEMU needs a different interrupt controller. Set <code>MOLA_GIC=3</code> and create the machine again. QEMU writes its own errors to <code>runtime.log</code>, beside the console log.</p>
+
+    <h3>Screenshots return scrambled frames</h3>
+    <p>The capture reached the compositor mid-draw. Send an input event first, such as <code>{"action": "key", "key": "super"}</code>, then capture again.</p>
+
+    <h3>The desktop URL stays on "connecting"</h3>
+    <p>Request a new ticket. Each one works once and lasts 60 seconds. Note that changing only the <code>#fragment</code> of a URL does not reload the page, so pasting a fresh ticket over a spent one in the address bar does nothing. Open the URL in a new tab.</p>
+
+    <h3>Creating or starting a machine hits a limit</h3>
+    <p>The engine allows 2 running machines and 8192 MB between them. Raise either limit with <code>MOLA_MAX_RUNNING</code> or <code>MOLA_MAX_MEMORY_MB</code>, or stop a machine you are not using. Stopped machines consume disk only and count against neither limit.</p>
+
+    <h3>A machine appears that you did not create</h3>
+    <p>At startup the engine adopts any machine the runtime holds but the registry does not list, and names it <code>adopted-&lt;id&gt;</code>. A previous engine died before it wrote the record. The machine runs normally, so delete it the usual way.</p>
+  </section>
+    </main>
+  </div>
+  <footer>
+    <p><a href="https://github.com/obaid/mola-core">Source</a> · <a href="https://www.npmjs.com/package/mola-core">npm</a> · <a href="https://github.com/obaid/mola-core/blob/main/LICENSE.md">FSL-1.1-ALv2</a></p>
+    <p>Use Mola for anything, at home or at work, including inside a product you sell. The one thing you may not do is sell Mola itself, or a service that does what it does.</p>
+    <p>Every release becomes Apache 2.0 two years after it ships, and that grant is irrevocable. Until then the source is published and you can read, change, and run it, but the terms are not open source by the OSI definition.</p>
+    <p>Omarchy and the bundled dependencies keep their own licences. Mola is independent, and is not affiliated with or endorsed by Omarchy, DHH, 37signals, Basecamp, or the Omacom Foundation.</p>
+  </footer>
+
+</div>
+
+
+<script>
+(() => {
+  const links = [...document.querySelectorAll('.sidebar a[href^="#"]')];
+  const targets = links
+    .map((a) => ({ a, el: document.getElementById(a.getAttribute('href').slice(1)) }))
+    .filter((t) => t.el);
+  if (targets.length === 0) return;
+
+  // Highlight the heading nearest the top of the viewport rather than whatever
+  // happens to intersect, so the mark does not jump around on long sections.
+  const mark = () => {
+    let current = targets[0];
+    for (const t of targets) {
+      if (t.el.getBoundingClientRect().top <= 120) current = t;
+    }
+    for (const t of targets) t.a.classList.toggle('here', t === current);
+  };
+
+  // Throttled on a clock rather than on a frame. requestAnimationFrame is
+  // paused whenever the page is not being composited, and a sidebar that
+  // silently stops following the reader is worse than one that updates a few
+  // milliseconds late.
+  let last = 0;
+  addEventListener('scroll', () => {
+    const now = Date.now();
+    if (now - last < 80) return;
+    last = now;
+    mark();
+  }, { passive: true });
+
+  addEventListener('hashchange', mark);
+  mark();
+})();
+</script>
+</body>
+</html>
