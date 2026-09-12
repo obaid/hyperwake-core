@@ -12,35 +12,41 @@ import time
 
 os.umask(0o077)
 if not os.access('/dev/kvm', os.R_OK | os.W_OK):
-    raise SystemExit('Hyperwake requires a Linux x86_64 host with usable /dev/kvm. No emulation fallback.')
-base = Path('/opt/hyperwake')
+    raise SystemExit('Mola requires a Linux x86_64 host with usable /dev/kvm. No emulation fallback.')
+base = Path('/opt/mola')
 data = Path('/data')
 data.mkdir(exist_ok=True)
 disk = data / 'root.ext4'
 if not disk.exists():
     temporary = data / 'root.ext4.new'
     subprocess.run(['zstd', '-d', '--sparse', '-f', str(base / 'root.ext4.zst'), '-o', str(temporary)], check=True)
-    size = max(16, int(os.environ.get('HYPERWAKE_VM_DISK_GB', '40')))
+    size = max(16, int(os.environ.get('MOLA_VM_DISK_GB', '40')))
     subprocess.run(['truncate', '-s', f'{size}G', str(temporary)], check=True)
     subprocess.run(['resize2fs', str(temporary)], check=True)
     temporary.rename(disk)
 
-with tempfile.TemporaryDirectory(prefix='hyperwake-identity-') as temp:
+with tempfile.TemporaryDirectory(prefix='mola-identity-') as temp:
     seed = Path(temp)
-    fields = ('HYPERWAKE_ENDPOINT', 'HYPERWAKE_REGISTRATION_TOKEN', 'HYPERWAKE_COMPUTER_ID', 'HYPERWAKE_AUTHORIZED_KEYS', 'HYPERWAKE_MACHINE_NAME')
-    (seed / 'identity.env').write_text(''.join(f'{key}={shlex.quote(os.environ.get(key, ""))}\n' for key in fields))
+    fields = ('MOLA_ENDPOINT', 'MOLA_REGISTRATION_TOKEN', 'MOLA_COMPUTER_ID', 'MOLA_AUTHORIZED_KEYS', 'MOLA_MACHINE_NAME')
+    identity = {key: os.environ.get(key, '') for key in fields}
+    # The same values under the name they carried before the rename, so this
+    # launcher can still start a guest image built before it. The values come
+    # from the MOLA_ variables either way: nothing sets the old names here.
+    # See runtime/native/host.py.
+    identity.update({'HYPERWAKE_' + key.removeprefix('MOLA_'): value for key, value in identity.items()})
+    (seed / 'identity.env').write_text(''.join(f'{key}={shlex.quote(value)}\n' for key, value in identity.items()))
     identity = Path('/run/identity.ext4')
     subprocess.run(['truncate', '-s', '8M', str(identity)], check=True)
     subprocess.run(['mkfs.ext4', '-q', '-F', '-d', str(seed), str(identity)], check=True)
 
-qmp_path = '/run/hyperwake-qmp.sock'
+qmp_path = '/run/mola-qmp.sock'
 Path(qmp_path).unlink(missing_ok=True)
 # Xvfb is only the host-side OpenGL surface. The customer desktop is Hyprland
 # inside the VM and sees a virtio GPU. CPU rendering avoids requiring a host GPU.
 args = ['xvfb-run', '-a', '-s', '-screen 0 1440x900x24', 'qemu-system-x86_64',
         '-enable-kvm', '-machine', 'q35', '-cpu', 'host',
-        '-smp', os.environ.get('HYPERWAKE_VM_CPUS', '2'),
-        '-m', os.environ.get('HYPERWAKE_VM_MEMORY_MB', '4096'),
+        '-smp', os.environ.get('MOLA_VM_CPUS', '2'),
+        '-m', os.environ.get('MOLA_VM_MEMORY_MB', '4096'),
         '-kernel', str(base / 'vmlinuz-linux'), '-initrd', str(base / 'initramfs-linux.img'),
         '-append', 'root=/dev/vda rw console=ttyS0 systemd.unit=multi-user.target',
         '-drive', f'file={disk},if=virtio,format=raw',

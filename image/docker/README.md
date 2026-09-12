@@ -1,6 +1,6 @@
 # Mola desktop image (development)
 
-`hyperwake/desktop:dev` — the machine image the **docker** compute driver
+`mola/desktop:dev` — the machine image the **docker** compute driver
 clones for every computer created on a developer laptop.
 
 ## This is not Omarchy
@@ -10,7 +10,7 @@ provisioning, the desktop gateway, SSH, whole-disk persistence, the usage
 ledger — can be exercised end to end without a Proxmox host.
 
 It is Debian with i3, not Arch with Hyprland. The `Image` record that points at
-it is deliberately slugged `hyperwake-dev-desktop`, the welcome screen says so
+it is deliberately slugged `mola-dev-desktop`, the welcome screen says so
 in the first paragraph, and the wallpaper says so too. Nothing in the product
 should ever present it as Omarchy.
 
@@ -30,7 +30,7 @@ The control plane does not care what distribution an image runs. It requires:
 |---|---|
 | VNC display on `:5900` inside the machine | the desktop gateway proxies to it |
 | `sshd` on `:22`, public-key auth only | the SSH path in the PRD |
-| authorized keys read from `HYPERWAKE_AUTHORIZED_KEYS` | per-machine key injection |
+| authorized keys read from `MOLA_AUTHORIZED_KEYS` | per-machine key injection |
 | the guest daemon running and calling home | health, auto-stop hints, shutdown |
 | `/home/dev` as the only directory that must survive a stop | the persistence promise |
 | no shared secret baked into the image | two clones must never share an identity |
@@ -42,29 +42,29 @@ Anything meeting that contract is a valid Mola image.
 
 ```bash
 # The daemon binary must exist first; the Dockerfile copies it in.
-cd guest/hyperwake-guest && make build
-cp bin/hyperwake-guest-linux-arm64 ../../image/docker/bin/hyperwake-guest
+cd guest/mola-guest && make build
+cp bin/mola-guest-linux-arm64 ../../image/docker/bin/mola-guest
 
-cd image/docker && docker build -t hyperwake/desktop:dev .
+cd image/docker && docker build -t mola/desktop:dev .
 ```
 
-Use `hyperwake-guest-linux-amd64` on an x86 host.
+Use `mola-guest-linux-amd64` on an x86 host.
 
 ## Environment
 
 | Variable | Purpose |
 |---|---|
-| `HYPERWAKE_ENDPOINT` | control plane base URL. May instead arrive via SMBIOS |
-| `HYPERWAKE_REGISTRATION_TOKEN` | single-use token, injected per machine |
-| `HYPERWAKE_SMBIOS_PATH` | override the DMI path identity is read from |
-| `HYPERWAKE_AUTHORIZED_KEYS` | newline-separated SSH public keys |
-| `HYPERWAKE_MACHINE_NAME` | shown in the status bar and welcome screen |
-| `HYPERWAKE_DISPLAY_GEOMETRY` | default `1440x900` |
-| `HYPERWAKE_HEARTBEAT_INTERVAL` | seconds; the control plane can override it |
+| `MOLA_ENDPOINT` | control plane base URL. May instead arrive via SMBIOS |
+| `MOLA_REGISTRATION_TOKEN` | single-use token, injected per machine |
+| `MOLA_SMBIOS_PATH` | override the DMI path identity is read from |
+| `MOLA_AUTHORIZED_KEYS` | newline-separated SSH public keys |
+| `MOLA_MACHINE_NAME` | shown in the status bar and welcome screen |
+| `MOLA_DISPLAY_GEOMETRY` | default `1440x900` |
+| `MOLA_HEARTBEAT_INTERVAL` | seconds; the control plane can override it |
 
 ## Persistence
 
-`/home/dev` is the volume. Three things live under `~/.hyperwake` and therefore
+`/home/dev` is the volume. Three things live under `~/.mola` and therefore
 persist with the disk:
 
 - `state/` — the machine credential. **This must persist.** The registration

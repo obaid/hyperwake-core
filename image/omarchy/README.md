@@ -1,4 +1,4 @@
-# `hyperwake/omarchy:dev` — the flagship image
+# `mola/omarchy:dev` — the flagship image
 
 Genuine upstream **Omarchy v4.0.3** on Arch Linux x86_64. This is the image the
 product is named after. `../docker` is the Debian + i3 development stand-in and
@@ -23,7 +23,7 @@ Verified installed: `hyprland 0.56.2`, `quickshell 0.3.1`, `aether 4.29.8`,
 ### Deliberate exclusions
 
 Seven packages address physical hardware a VM does not have, and are recorded in
-`/etc/hyperwake/image.json` rather than silently dropped: `asdcontrol` (Apple
+`/etc/mola/image.json` rather than silently dropped: `asdcontrol` (Apple
 display brightness over USB), `ddcutil` (DDC/CI over I2C), `plymouth` (boot
 splash), `bolt` (Thunderbolt authorisation), and the three `cups` printing
 packages.
@@ -49,10 +49,10 @@ the production path.
 
 ```bash
 # The guest daemon must be built for amd64 first.
-(cd ../../guest/hyperwake-guest && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
-   go build -o ../../image/omarchy/bin/hyperwake-guest-amd64 ./cmd/hyperwake-guest)
+(cd ../../guest/mola-guest && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+   go build -o ../../image/omarchy/bin/mola-guest-amd64 ./cmd/mola-guest)
 
-docker build --platform linux/amd64 -t hyperwake/omarchy:dev .
+docker build --platform linux/amd64 -t mola/omarchy:dev .
 ```
 
 ~9 GB and about 15 minutes on a warm cache; the package install alone is 6.5 GB.
@@ -62,12 +62,12 @@ docker build --platform linux/amd64 -t hyperwake/omarchy:dev .
 | | State |
 |---|---|
 | Omarchy package set installs from pinned sources | verified |
-| Immutable image identity in `/etc/hyperwake/image.json` | verified |
+| Immutable image identity in `/etc/mola/image.json` | verified |
 | `/home/dev` survives container recreation | verified |
 | First-boot seeding is additive; second boot leaves home alone | verified |
 | Per-machine SSH host keys, stable across wake | verified |
 | `docker stop` returns in 0s, exit 0 | verified |
-| `hyperwake-doctor` fails honestly on missing capability | verified |
+| `mola-doctor` fails honestly on missing capability | verified |
 | **Hyprland session** | blocked — needs a GPU |
 | **wayvnc remote display** | blocked — needs the session |
 | **SSH login** | blocked — Rosetta cannot run sshd's seccomp sandbox |

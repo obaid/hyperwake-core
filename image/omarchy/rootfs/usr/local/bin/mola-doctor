@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Report what this machine can and cannot currently do. Exit non-zero if a
+# capability the control plane depends on is missing.
+set -uo pipefail
+fail=0
+check() {
+    if eval "$2" >/dev/null 2>&1; then printf '  %-24s ok\n' "$1"
+    else printf '  %-24s FAIL\n' "$1"; fail=1; fi
+}
+echo "mola doctor — $(date -u +%FT%TZ)"
+[ -r /etc/mola/image.json ] && echo "image: $(cat /etc/mola/image.json)"
+echo "capabilities:"
+check "omarchy config"   "[ -d /usr/share/omarchy ]"
+check "hyprland"         "command -v Hyprland"
+check "wayvnc"           "command -v wayvnc"
+check "chromium"         "command -v chromium"
+check "foot terminal"    "command -v foot"
+check "guest daemon"     "command -v mola-guest"
+check "sshd"             "command -v sshd"
+check "persistent home"  "mountpoint -q /home/dev || [ -d /home/dev ]"
+check "drm render node"  "[ -d /dev/dri ]"
+exit $fail

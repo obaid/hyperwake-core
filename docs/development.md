@@ -69,7 +69,7 @@ correctness for tidiness.
 ## Building the guest daemon
 
 ```sh
-make -C guest/hyperwake-guest
+make -C guest/mola-guest
 ```
 
 Binaries are not committed. A repository that ships its own build output invites

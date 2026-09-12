@@ -74,8 +74,8 @@ with (image / 'root.ext4').open('r+b') as disk: disk.truncate(16 * 1024**3)
 for name in ('vmlinuz-linux', 'initramfs-linux.img', 'guest-manifest.json', 'provenance.json', 'build-spec.json', 'LICENSE.omarchy', 'packages.lock.txt'):
     shutil.copy2(factory / name, image / name)
 subprocess.run(['docker', 'run', '--rm', '-e', 'GOOS=linux', '-e', 'GOARCH=arm64', '-e', 'CGO_ENABLED=0',
-    '-v', str(root / 'guest/hyperwake-guest') + ':/src:ro', '-v', str(out) + ':/out', '-w', '/src',
-    'golang:1.24-bookworm', 'go', 'build', '-o', '/out/hyperwake-guest', './cmd/hyperwake-guest'], check=True)
+    '-v', str(root / 'guest/mola-guest') + ':/src:ro', '-v', str(out) + ':/out', '-w', '/src',
+    'golang:1.24-bookworm', 'go', 'build', '-o', '/out/mola-guest', './cmd/mola-guest'], check=True)
 subprocess.run(['docker', 'build', '-t', 'mola/native-image-tools:local', '-f', str(root / 'runtime/native/prepare.Dockerfile'), str(root / 'runtime/native')], check=True)
 subprocess.run(['docker', 'run', '--rm', '--privileged', '-v', str(image) + ':/work', '-v', str(out) + ':/overlay:ro',
     '-v', str(root) + ':/repo:ro', 'mola/native-image-tools:local'], check=True)

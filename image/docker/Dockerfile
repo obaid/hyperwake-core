@@ -1,10 +1,10 @@
-# Hyperwake development desktop image.
+# Mola development desktop image.
 #
 # This is the LOCAL DEVELOPMENT stand-in for the production Omarchy image. It
 # exists so the whole control plane — provisioning, desktop gateway, SSH,
 # persistence, billing — can be exercised end to end on a laptop without a
 # Proxmox host. It is NOT Omarchy, and the Image record that points at it is
-# labelled `hyperwake-dev-desktop` for exactly that reason.
+# labelled `mola-dev-desktop` for exactly that reason.
 #
 # Production builds the real thing with Packer from a pinned Omarchy ISO; see
 # ../packer/. The contract this image must honour is the one the control plane
@@ -15,7 +15,7 @@
 #   * the guest daemon running and calling home
 #   * /home/dev being the one directory that must survive stop/start
 #
-# Anything satisfying that contract is a valid Hyperwake image.
+# Anything satisfying that contract is a valid Mola image.
 
 FROM debian:bookworm-slim
 
@@ -96,7 +96,7 @@ RUN mkdir -p /run/sshd \
         -e 's/^#\?KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/' \
         -e 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' \
         /etc/ssh/sshd_config \
-    && printf '\n# Hyperwake\nUsePAM yes\nX11Forwarding no\nAllowUsers dev\n' >> /etc/ssh/sshd_config
+    && printf '\n# Mola\nUsePAM yes\nX11Forwarding no\nAllowUsers dev\n' >> /etc/ssh/sshd_config
 
 # Host keys are deliberately NOT generated here. Baking them into the image
 # would give every clone the same SSH identity — the exact "no shared secret in
@@ -106,20 +106,20 @@ RUN rm -f /etc/ssh/ssh_host_*
 
 # The skeleton is what a brand-new machine's home directory starts as. It lives
 # outside /home/dev because /home/dev is a mount point at runtime.
-COPY skel/ /usr/share/hyperwake/skel/
+COPY skel/ /usr/share/mola/skel/
 COPY rootfs/ /
-COPY bin/hyperwake-guest /usr/local/bin/hyperwake-guest
+COPY bin/mola-guest /usr/local/bin/mola-guest
 
-RUN chmod +x /usr/local/bin/hyperwake-guest \
-             /usr/local/bin/hyperwake-entrypoint \
-             /usr/local/bin/hyperwake-wallpaper \
-    && /usr/local/bin/hyperwake-wallpaper /usr/share/hyperwake/wallpaper.png
+RUN chmod +x /usr/local/bin/mola-guest \
+             /usr/local/bin/mola-entrypoint \
+             /usr/local/bin/mola-wallpaper \
+    && /usr/local/bin/mola-wallpaper /usr/share/mola/wallpaper.png
 
-ENV HYPERWAKE_STATE_DIR=/var/lib/hyperwake \
-    HYPERWAKE_IMAGE_SLUG=hyperwake-dev-desktop \
-    HYPERWAKE_IMAGE_VERSION=0.1.0
+ENV MOLA_STATE_DIR=/var/lib/mola \
+    MOLA_IMAGE_SLUG=mola-dev-desktop \
+    MOLA_IMAGE_VERSION=0.1.0
 
 EXPOSE 5900 22
 
 # tini reaps the zombies that a multi-process container otherwise accumulates.
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/hyperwake-entrypoint"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/mola-entrypoint"]

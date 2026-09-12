@@ -1,4 +1,4 @@
-! urxvt, themed to match the Hyperwake palette.
+! urxvt, themed to match the Mola palette.
 
 URxvt.font:            xft:JetBrains Mono:size=11
 URxvt.boldFont:        xft:JetBrains Mono:style=Bold:size=11

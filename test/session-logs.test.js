@@ -18,7 +18,7 @@ import { join } from 'node:path';
  * around it can, and it is the half that failed.
  */
 
-const SESSION = join(import.meta.dirname, '../image/omarchy/rootfs/usr/local/bin/hyperwake-session');
+const SESSION = join(import.meta.dirname, '../image/omarchy/rootfs/usr/local/bin/mola-session');
 
 /** Run one of the script's maintenance subcommands against a throwaway tree. */
 function run(mode, { runtime, logs, cap }) {
@@ -27,8 +27,8 @@ function run(mode, { runtime, logs, cap }) {
     env: {
       ...process.env,
       XDG_RUNTIME_DIR: runtime,
-      HYPERWAKE_LOG_DIR: logs,
-      ...(cap ? { HYPERWAKE_LOG_CAP_BYTES: String(cap) } : {}),
+      MOLA_LOG_DIR: logs,
+      ...(cap ? { MOLA_LOG_CAP_BYTES: String(cap) } : {}),
     },
   });
 }
@@ -105,9 +105,9 @@ test('an unwritable log directory is survivable, not fatal', (t) => {
 
   const result = execFileSync('bash', [SESSION, '--contain-logs'], {
     encoding: 'utf8',
-    env: { ...process.env, HOME: root, XDG_RUNTIME_DIR: runtime, HYPERWAKE_LOG_DIR: logs },
+    env: { ...process.env, HOME: root, XDG_RUNTIME_DIR: runtime, MOLA_LOG_DIR: logs },
   });
 
   // It falls back to the home directory rather than giving up.
-  assert.ok(existsSync(join(root, '.hyperwake/log/hypr')), `fell back; said: ${result}`);
+  assert.ok(existsSync(join(root, '.mola/log/hypr')), `fell back; said: ${result}`);
 });

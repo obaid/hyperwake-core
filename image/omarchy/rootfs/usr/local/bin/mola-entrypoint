@@ -1,0 +1,234 @@
+#!/bin/bash
+# Mola guest init.
+#
+# Brings up the three things a Mola machine owes the control plane — a VNC
+# display, sshd, and the guest daemon — and then waits.
+#
+# The single most important job here is persistence. /home/dev is a volume. On
+# a brand-new computer it arrives empty; on every wake after that it arrives
+# exactly as the customer left it. Seeding must therefore be strictly additive:
+# anything that unconditionally overwrote a file under /home/dev would silently
+# destroy customer work, which is the one failure this product cannot have.
+
+set -uo pipefail
+
+log() { printf '{"level":"%s","source":"entrypoint","msg":"%s"}\n' "$1" "$2"; }
+
+HOME_DIR=/home/dev
+HW_DIR="${HOME_DIR}/.mola"
+LEGACY_DIR="${HOME_DIR}/.hyperwake"
+
+# Platform state lives on the persistent volume, not in the container
+# filesystem. Two things depend on this:
+#
+#   1. The machine credential. A wake must reuse it — the registration token is
+#      single-use, so a machine that lost its credential could never re-register
+#      and would be permanently orphaned.
+#   2. The SSH host keys. They are the machine's identity. If they changed on
+#      every wake, every customer would get a host-key-changed warning and the
+#      "same computer" promise would visibly break.
+STATE_DIR="${HW_DIR}/state"
+HOST_KEY_DIR="${HW_DIR}/ssh"
+
+export MOLA_STATE_DIR="${STATE_DIR}"
+
+# A machine that first booted under the old name keeps all of that state in
+# ~/.hyperwake, on the volume, and the volume outlives the image. Leaving it
+# behind would not read as data loss — the machine would come up looking new —
+# but it would regenerate the SSH host keys, so the customer gets a
+# host-key-changed warning, and it would abandon a single-use registration
+# token, so the machine could never register again. Move it once, before
+# anything reads the new path.
+#
+# Removable once no machine that predates the rename is still being woken.
+adopt_legacy_state() {
+    [ -d "${LEGACY_DIR}" ] || return 0
+    [ -e "${HW_DIR}" ] && return 0
+
+    log info "adopting state from ${LEGACY_DIR}, left by the old name"
+    mv "${LEGACY_DIR}" "${HW_DIR}"
+}
+
+# ---------------------------------------------------------------------------
+# Identity
+# ---------------------------------------------------------------------------
+
+# The status bar and the welcome screen both name the machine. A remote desktop
+# that does not tell you which machine you are on is how people run the wrong
+# command on the wrong box.
+write_machine_label() {
+    mkdir -p /etc/mola
+    printf '%s' "${MOLA_MACHINE_NAME:-mola}" > /etc/mola/machine-label
+}
+
+# ---------------------------------------------------------------------------
+# Home directory
+# ---------------------------------------------------------------------------
+
+seed_home() {
+    mkdir -p "${HOME_DIR}"
+
+    if [ ! -e "${HW_DIR}/.seeded" ]; then
+        log info "first boot: seeding home directory"
+
+        # cp -rn never overwrites an existing file. Even on a "first" boot that
+        # is actually a re-attach of a populated volume, nothing is lost.
+        cp -rn /usr/share/mola/skel/. "${HOME_DIR}/" 2>/dev/null || true
+
+        mkdir -p "${HW_DIR}"
+        date -u +%Y-%m-%dT%H:%M:%SZ > "${HW_DIR}/.seeded"
+    else
+        log info "existing home directory found, leaving it untouched"
+    fi
+
+    mkdir -p "${STATE_DIR}" "${HOST_KEY_DIR}" "${HOME_DIR}/.ssh" \
+             "${HOME_DIR}/Desktop" "${HOME_DIR}/Downloads" "${HOME_DIR}/Projects"
+
+    chmod 700 "${STATE_DIR}" "${HOST_KEY_DIR}" "${HOME_DIR}/.ssh"
+    chown -R dev:dev "${HOME_DIR}"
+}
+
+# ---------------------------------------------------------------------------
+# SSH
+# ---------------------------------------------------------------------------
+
+setup_ssh() {
+    # Per-machine host keys, generated once and then persisted with the disk.
+    if ! ls "${HOST_KEY_DIR}"/ssh_host_*_key >/dev/null 2>&1; then
+        log info "generating per-machine SSH host keys"
+        ssh-keygen -q -t ed25519 -N '' -f "${HOST_KEY_DIR}/ssh_host_ed25519_key" </dev/null
+        ssh-keygen -q -t rsa -b 4096 -N '' -f "${HOST_KEY_DIR}/ssh_host_rsa_key" </dev/null
+    fi
+
+    cp "${HOST_KEY_DIR}"/ssh_host_*_key /etc/ssh/
+    cp "${HOST_KEY_DIR}"/ssh_host_*_key.pub /etc/ssh/
+    chmod 600 /etc/ssh/ssh_host_*_key
+    chmod 644 /etc/ssh/ssh_host_*_key.pub
+
+    # Authorized keys are injected per machine at clone time. They are rewritten
+    # on every boot so that a key the customer removed in the control plane
+    # actually stops working — this file is control-plane state, not user state.
+    if [ -n "${MOLA_AUTHORIZED_KEYS:-}" ]; then
+        printf '%s\n' "${MOLA_AUTHORIZED_KEYS}" > "${HOME_DIR}/.ssh/authorized_keys"
+        chmod 600 "${HOME_DIR}/.ssh/authorized_keys"
+        chown dev:dev "${HOME_DIR}/.ssh/authorized_keys"
+
+        local count
+        count=$(grep -c . "${HOME_DIR}/.ssh/authorized_keys" 2>/dev/null || echo 0)
+        log info "installed ${count} authorized key(s)"
+    else
+        log warn "no authorized keys injected; SSH will reject all logins"
+    fi
+
+    mkdir -p /run/sshd
+    /usr/sbin/sshd -D -e &
+    echo $! > /run/mola-sshd.pid
+}
+
+# ---------------------------------------------------------------------------
+# Display
+# ---------------------------------------------------------------------------
+
+start_display() {
+    # Omarchy is a Wayland session: Hyprland plus wayvnc, started as `dev`.
+    # There is no X server and deliberately no X11 fallback — see
+    # mola-session for why substituting a different desktop is not an
+    # option for an image that claims to be Omarchy.
+    mkdir -p /run/user/1000
+    chown dev:dev /run/user/1000
+    chmod 700 /run/user/1000
+
+    # Somewhere for the session to put Hyprland's log that is not the runtime
+    # tmpfs. The session runs as `dev` and cannot create this under /var
+    # itself. See the log containment section of mola-session: without a
+    # writable directory here the compositor's log fills /run/user/1000 and the
+    # machine silently loses the ability to launch graphical applications.
+    mkdir -p /var/log/mola
+    chown dev:dev /var/log/mola
+
+    groupadd -f seat
+    usermod -aG seat dev 2>/dev/null || true
+
+    su dev -c "XDG_RUNTIME_DIR=/run/user/1000 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus /usr/local/bin/mola-session" &
+    echo $! > /run/mola-session.pid
+}
+
+# ---------------------------------------------------------------------------
+# Guest daemon
+# ---------------------------------------------------------------------------
+
+# Identity reaches a machine by one of two routes, and the entrypoint must not
+# assume either:
+#
+#   Docker / dev  — environment variables set at container creation
+#   Proxmox / prod — a base64 JSON payload in the SMBIOS serial, because the
+#                    control plane's API token is scoped to VM lifecycle only
+#                    and cannot write cloud-init snippets to host storage
+#
+# Gating this on MOLA_ENDPOINT alone would mean the daemon never starts on
+# the production path, where that variable does not exist.
+has_identity() {
+    [ -n "${MOLA_ENDPOINT:-}" ] && return 0
+
+    local serial_path="${MOLA_SMBIOS_PATH:-/sys/class/dmi/id/product_serial}"
+    [ -r "${serial_path}" ] || return 1
+
+    local serial
+    serial=$(tr -d '[:space:]' < "${serial_path}" 2>/dev/null)
+
+    # Unprovisioned hardware leaves placeholder text here. The daemon does the
+    # authoritative check; this only avoids starting it with obvious junk.
+    case "${serial}" in
+        ''|None|0|NotSpecified|Tobefilledby*|Defaultstring) return 1 ;;
+        *) return 0 ;;
+    esac
+}
+
+start_guest_daemon() {
+    if ! has_identity; then
+        log warn "no identity source (no MOLA_ENDPOINT, no SMBIOS payload); guest daemon will not start"
+        return 0
+    fi
+
+    log info "starting guest daemon"
+    /usr/local/bin/mola-guest &
+    echo $! > /run/mola-guest.pid
+}
+
+# ---------------------------------------------------------------------------
+# Shutdown
+# ---------------------------------------------------------------------------
+
+# A stop request must look like a clean OS shutdown to anything running inside,
+# so processes get a chance to flush to the persistent disk.
+on_term() {
+    log info "shutdown requested, stopping services"
+
+    for pidfile in /run/mola-session.pid /run/mola-guest.pid \
+                   /run/mola-sshd.pid; do
+        [ -f "${pidfile}" ] || continue
+        kill "$(cat "${pidfile}")" 2>/dev/null || true
+    done
+
+    sync
+    exit 0
+}
+
+trap on_term TERM INT
+
+# ---------------------------------------------------------------------------
+
+log info "mola machine starting (image ${MOLA_IMAGE_SLUG:-unknown} ${MOLA_IMAGE_VERSION:-})"
+
+adopt_legacy_state
+write_machine_label
+seed_home
+setup_ssh
+start_display || log error "display failed to start"
+start_guest_daemon
+
+log info "machine ready"
+
+# Wait on every child. `wait -n` would return on the first exit; the machine
+# should stay up as long as anything is still running.
+wait

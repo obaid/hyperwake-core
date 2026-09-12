@@ -1,10 +1,10 @@
 [Unit]
-Description=Hyperwake computer services
+Description=Mola computer services
 After=network-online.target
 Wants=network-online.target
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/hyperwake-vm-start
+ExecStart=/usr/local/bin/mola-vm-start
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=45

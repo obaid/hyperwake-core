@@ -1,4 +1,4 @@
-# Hyperwake flagship image: genuine Omarchy.
+# Mola flagship image: genuine Omarchy.
 #
 # This is NOT the Debian/i3 stand-in in ../docker. It is real Arch Linux with
 # the real upstream Omarchy package set, installed from Omarchy's own pacman
@@ -20,7 +20,7 @@
 FROM --platform=linux/amd64 archlinux:latest
 
 ARG OMARCHY_REF=v4.0.3
-ARG HYPERWAKE_IMAGE_VERSION=0.1.0
+ARG MOLA_IMAGE_VERSION=0.1.0
 
 # pacman 7 sandboxes downloads with Landlock and an unprivileged `alpm` user.
 # Docker Desktop's VM permits neither, and the failure mode is an unhelpful
@@ -62,7 +62,7 @@ RUN set -eux; \
     pacman -Scc --noconfirm
 
 # wayvnc is how the desktop leaves the machine. Omarchy does not ship it —
-# upstream assumes a physical screen — so remote display is Hyperwake's
+# upstream assumes a physical screen — so remote display is Mola's
 # addition, not something inherited from Omarchy.
 RUN pacman -Sy --noconfirm --needed wayvnc seatd openssh catatonit sudo \
  && pacman -Scc --noconfirm
@@ -82,7 +82,7 @@ RUN mkdir -p /run/sshd \
       -e 's/^#\?KbdInteractiveAuthentication.*/KbdInteractiveAuthentication no/' \
       -e 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' \
       /etc/ssh/sshd_config \
- && printf '\n# Hyperwake\nX11Forwarding no\nAllowUsers dev\n' >> /etc/ssh/sshd_config
+ && printf '\n# Mola\nX11Forwarding no\nAllowUsers dev\n' >> /etc/ssh/sshd_config
 
 # No host keys in the image. Baking them in would give every clone the same SSH
 # identity — the "no shared secret in a reusable template" rule. The entrypoint
@@ -90,9 +90,9 @@ RUN mkdir -p /run/sshd \
 RUN rm -f /etc/ssh/ssh_host_*
 
 # Omarchy's shipped dotfiles become the skeleton for a new machine's home.
-RUN mkdir -p /usr/share/hyperwake/skel \
- && cp -r /usr/share/omarchy/config/. /usr/share/hyperwake/skel/.config/ 2>/dev/null || true \
- && mkdir -p /usr/share/hyperwake/skel/.config
+RUN mkdir -p /usr/share/mola/skel \
+ && cp -r /usr/share/omarchy/config/. /usr/share/mola/skel/.config/ 2>/dev/null || true \
+ && mkdir -p /usr/share/mola/skel/.config
 
 # A machine built from this image is a new install, not an upgrade. Without
 # markers, omarchy-migrate reports every migration in the pinned tag as pending
@@ -101,27 +101,27 @@ RUN mkdir -p /usr/share/hyperwake/skel \
 # version would have left behind. The final test fails the build rather than
 # silently shipping the nag again if upstream moves the directory.
 RUN set -eux; \
-    mkdir -p /usr/share/hyperwake/skel/.local/state/omarchy/migrations; \
+    mkdir -p /usr/share/mola/skel/.local/state/omarchy/migrations; \
     count=0; \
     for migration in /usr/share/omarchy/migrations/*.sh; do \
       [ -f "$migration" ] || continue; \
-      touch "/usr/share/hyperwake/skel/.local/state/omarchy/migrations/$(basename "$migration")"; \
+      touch "/usr/share/mola/skel/.local/state/omarchy/migrations/$(basename "$migration")"; \
       count=$((count + 1)); \
     done; \
     echo "stamped $count Omarchy migrations"; \
     test "$count" -gt 0
 
 COPY rootfs/ /
-COPY bin/hyperwake-guest-amd64 /usr/local/bin/hyperwake-guest
+COPY bin/mola-guest-amd64 /usr/local/bin/mola-guest
 
-RUN chmod +x /usr/local/bin/hyperwake-guest \
-             /usr/local/bin/hyperwake-entrypoint \
-             /usr/local/bin/hyperwake-session \
-             /usr/local/bin/hyperwake-doctor
+RUN chmod +x /usr/local/bin/mola-guest \
+             /usr/local/bin/mola-entrypoint \
+             /usr/local/bin/mola-session \
+             /usr/local/bin/mola-doctor
 
 # Immutable image identity. The control plane pins a computer to a version at
 # creation; a machine must never silently become a different image.
-RUN mkdir -p /etc/hyperwake && printf '{\n\
+RUN mkdir -p /etc/mola && printf '{\n\
   "family": "omarchy/agent",\n\
   "image_version": "%s",\n\
   "omarchy_ref": "%s",\n\
@@ -134,14 +134,14 @@ RUN mkdir -p /etc/hyperwake && printf '{\n\
   "excluded_packages": ["asdcontrol","ddcutil","plymouth","bolt","cups","cups-filters","cups-pk-helper"],\n\
   "requires": {"drm_render_node": true}\n\
 }\n' \
-    "${HYPERWAKE_IMAGE_VERSION}" "${OMARCHY_REF}" "$(cat /etc/omarchy-commit)" "$(date -u +%FT%TZ)" \
-    > /etc/hyperwake/image.json
+    "${MOLA_IMAGE_VERSION}" "${OMARCHY_REF}" "$(cat /etc/omarchy-commit)" "$(date -u +%FT%TZ)" \
+    > /etc/mola/image.json
 
-ENV HYPERWAKE_STATE_DIR=/home/dev/.hyperwake/state \
-    HYPERWAKE_IMAGE_SLUG=omarchy-agent \
-    HYPERWAKE_IMAGE_VERSION=0.1.0 \
+ENV MOLA_STATE_DIR=/home/dev/.mola/state \
+    MOLA_IMAGE_SLUG=omarchy-agent \
+    MOLA_IMAGE_VERSION=0.1.0 \
     XDG_RUNTIME_DIR=/run/user/1000
 
 EXPOSE 5900 22
 
-ENTRYPOINT ["/usr/bin/catatonit", "--", "/usr/local/bin/hyperwake-entrypoint"]
+ENTRYPOINT ["/usr/bin/catatonit", "--", "/usr/local/bin/mola-entrypoint"]

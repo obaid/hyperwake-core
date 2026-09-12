@@ -18,13 +18,13 @@ def prepare(root, output, qemu):
     subprocess.run([sys.executable, str(root / 'bin/build-images'), '--guest-only'], check=True)
     image.mkdir(parents=True, mode=0o700)
     name = 'mola-export-' + uuid.uuid4().hex[:12]
-    subprocess.run(['docker', 'create', '--name', name, 'hyperwake/omarchy-kvm:local'], check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(['docker', 'create', '--name', name, 'mola/omarchy-kvm:local'], check=True, stdout=subprocess.DEVNULL)
     try:
-        subprocess.run(['docker', 'cp', name + ':/opt/hyperwake/.', str(image)], check=True)
+        subprocess.run(['docker', 'cp', name + ':/opt/mola/.', str(image)], check=True)
     finally:
         subprocess.run(['docker', 'rm', '-v', name], check=True, stdout=subprocess.DEVNULL)
     subprocess.run(['docker', 'run', '--rm', '--entrypoint', 'zstd', '-v', str(image) + ':/output',
-                    'hyperwake/omarchy-kvm:local', '-d', '--sparse', '/output/root.ext4.zst', '-o', '/output/root.ext4'], check=True)
+                    'mola/omarchy-kvm:local', '-d', '--sparse', '/output/root.ext4.zst', '-o', '/output/root.ext4'], check=True)
     (image / 'root.ext4.zst').unlink()
     windows = platform.system() == 'Windows'
     config = {'schema': 1, 'architecture': 'x86_64', 'qemu': str(qemu.resolve()), 'image': str(image),

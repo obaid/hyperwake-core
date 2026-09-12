@@ -1,0 +1,26 @@
+#!/bin/bash
+# The graphical session: wallpaper, then the window manager.
+#
+# Runs as the `dev` user with DISPLAY already exported by the entrypoint.
+
+set -u
+
+export DISPLAY="${DISPLAY:-:1}"
+
+# Without xrdb the terminal ignores ~/.Xresources entirely and renders in the
+# default white-on-black bitmap font, which looks broken rather than plain.
+if [ -f "$HOME/.Xresources" ]; then
+    xrdb -merge "$HOME/.Xresources" 2>/dev/null || true
+fi
+
+# The wallpaper is set before i3 starts so the very first frame the customer
+# sees is branded rather than the X root weave pattern.
+if command -v feh >/dev/null 2>&1 && [ -f /usr/share/mola/wallpaper.png ]; then
+    feh --no-fehbg --bg-fill /usr/share/mola/wallpaper.png 2>/dev/null || true
+fi
+
+# No screen blanking: a desktop that goes black after 10 minutes looks exactly
+# like a broken connection.
+xset s off -dpms 2>/dev/null || true
+
+exec i3

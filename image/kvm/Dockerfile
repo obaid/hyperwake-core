@@ -1,5 +1,5 @@
 # A real Linux VM in a Docker-managed process. Build the pinned Omarchy base first.
-ARG OMARCHY_IMAGE=hyperwake/omarchy:dev
+ARG OMARCHY_IMAGE=mola/omarchy:dev
 FROM ${OMARCHY_IMAGE} AS guest
 USER root
 RUN pacman -Syu --noconfirm --needed linux mkinitcpio python systemd-sysvcompat \
@@ -9,18 +9,18 @@ RUN pacman -Syu --noconfirm --needed linux mkinitcpio python systemd-sysvcompat 
     && cp /usr/lib/modules/$kernel/vmlinuz /boot/vmlinuz-linux \
     && mkinitcpio -k "$kernel" -g /boot/initramfs-linux.img \
     && pacman -Scc --noconfirm
-COPY guest-start /usr/local/bin/hyperwake-vm-start
-COPY guest.service /etc/systemd/system/hyperwake.service
-RUN chmod +x /usr/local/bin/hyperwake-vm-start \
+COPY guest-start /usr/local/bin/mola-vm-start
+COPY guest.service /etc/systemd/system/mola.service
+RUN chmod +x /usr/local/bin/mola-vm-start \
     && mkdir -p /etc/systemd/system/multi-user.target.wants /etc/systemd/network \
-    && ln -sf /etc/systemd/system/hyperwake.service /etc/systemd/system/multi-user.target.wants/hyperwake.service \
+    && ln -sf /etc/systemd/system/mola.service /etc/systemd/system/multi-user.target.wants/mola.service \
     && ln -sf /usr/lib/systemd/system/systemd-networkd.service /etc/systemd/system/multi-user.target.wants/systemd-networkd.service \
     && ln -sf /usr/lib/systemd/system/systemd-resolved.service /etc/systemd/system/multi-user.target.wants/systemd-resolved.service \
-    && printf '[Match]\nName=en* eth*\n[Network]\nDHCP=yes\n' > /etc/systemd/network/20-hyperwake.network \
+    && printf '[Match]\nName=en* eth*\n[Network]\nDHCP=yes\n' > /etc/systemd/network/20-mola.network \
     && rm -f /etc/machine-id /etc/ssh/ssh_host_* \
     && touch /etc/machine-id \
-    && mkdir -p /usr/share/hyperwake/skel/.local/share \
-    && ln -sfn /usr/share/omarchy /usr/share/hyperwake/skel/.local/share/omarchy
+    && mkdir -p /usr/share/mola/skel/.local/share \
+    && ln -sfn /usr/share/omarchy /usr/share/mola/skel/.local/share/omarchy
 
 # Filesystem assembly is architecture-independent; keep it native even when
 # cross-building the x86_64 guest image on an ARM development machine.
@@ -39,9 +39,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     qemu-system-x86 qemu-system-gui qemu-utils xvfb xauth libgl1-mesa-dri mesa-utils \
     python3 e2fsprogs zstd tini \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=disk /output/ /opt/hyperwake/
-COPY launch.py /usr/local/bin/hyperwake-vm
+COPY --from=disk /output/ /opt/mola/
+COPY launch.py /usr/local/bin/mola-vm
 ENV LIBGL_ALWAYS_SOFTWARE=1
 VOLUME /data
 EXPOSE 22 5900
-ENTRYPOINT ["/usr/bin/tini", "--", "python3", "/usr/local/bin/hyperwake-vm"]
+ENTRYPOINT ["/usr/bin/tini", "--", "python3", "/usr/local/bin/mola-vm"]

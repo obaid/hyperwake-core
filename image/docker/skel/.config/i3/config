@@ -1,4 +1,4 @@
-# Hyperwake dev image — i3 configuration.
+# Mola dev image — i3 configuration.
 #
 # Tuned for a browser-delivered desktop: no compositor, no animations, gaps big
 # enough to read at VNC's frame rate, and a bar that tells the customer what
@@ -95,4 +95,4 @@ bar {
 
 # A terminal on login, so the first thing the customer sees when the desktop
 # opens is a working machine rather than an empty screen.
-exec --no-startup-id urxvt -e /usr/local/bin/hyperwake-welcome
+exec --no-startup-id urxvt -e /usr/local/bin/mola-welcome

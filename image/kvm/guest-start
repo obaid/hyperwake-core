@@ -1,11 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
-mkdir -p /run/hyperwake-bootstrap
-mountpoint -q /run/hyperwake-bootstrap || mount -o ro /dev/vdb /run/hyperwake-bootstrap
+mkdir -p /run/mola-bootstrap
+mountpoint -q /run/mola-bootstrap || mount -o ro /dev/vdb /run/mola-bootstrap
 # Written by the trusted launcher with shell escaping; unique to this VM.
 set -a
-source /run/hyperwake-bootstrap/identity.env
+source /run/mola-bootstrap/identity.env
 set +a
 # Keep the user's runtime directory and D-Bus alive across SSH disconnects.
 loginctl enable-linger dev
@@ -18,4 +18,4 @@ usermod -aG seat,video,render dev
 seatd -g seat &
 for n in $(seq 1 50); do [ -S /run/seatd.sock ] && break; sleep .1; done
 export LIBSEAT_BACKEND=seatd
-exec /usr/local/bin/hyperwake-entrypoint
+exec /usr/local/bin/mola-entrypoint

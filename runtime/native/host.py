@@ -38,10 +38,10 @@ def seed_disk(path, text):
     if len(data) > 65536: raise ValueError('Identity payload is too large')
     sectors, fat_sectors, root_sectors, cluster_bytes = 32768, 32, 32, 2048
     boot = bytearray(512)
-    boot[:11] = b'\xeb\x3c\x90HYPERWAK'
+    boot[:11] = b'\xeb\x3c\x90MOLA    '
     struct.pack_into('<HBHBHHBHHHII', boot, 11, 512, 4, 1, 2, 512, sectors, 0xf8, fat_sectors, 32, 64, 0, 0)
     boot[36:39] = b'\x80\x00\x29'
-    boot[43:54] = b'HYPERWAKE  '
+    boot[43:54] = b'MOLA       '
     boot[54:62] = b'FAT16   '
     boot[510:] = b'\x55\xaa'
     fat = bytearray(fat_sectors * 512)
@@ -175,12 +175,18 @@ class Runner:
         keys = spec.get('authorized_keys', [])
         if not isinstance(keys, list) or any(not isinstance(key, str) or len(key) > 16384 for key in keys):
             raise ValueError('Invalid authorized keys')
-        fields = {'HYPERWAKE_ENDPOINT': json.loads(self.config_path.read_text())['guest_endpoint'],
-                  'HYPERWAKE_REGISTRATION_TOKEN': spec['registration_token'],
-                  'HYPERWAKE_COMPUTER_ID': identifier, 'HYPERWAKE_MACHINE_NAME': spec['name'],
-                  'HYPERWAKE_AUTHORIZED_KEYS': '\n'.join(keys)}
+        fields = {'MOLA_ENDPOINT': json.loads(self.config_path.read_text())['guest_endpoint'],
+                  'MOLA_REGISTRATION_TOKEN': spec['registration_token'],
+                  'MOLA_COMPUTER_ID': identifier, 'MOLA_MACHINE_NAME': spec['name'],
+                  'MOLA_AUTHORIZED_KEYS': '\n'.join(keys)}
         if any(not isinstance(value, str) or '\x00' in value for value in fields.values()):
             raise ValueError('Invalid identity')
+        # Guest images cached before the rename read HYPERWAKE_*, and an image
+        # already on disk is never re-downloaded, so upgrading the engine alone
+        # would leave those machines unable to find their control plane.
+        # Writing both names costs a few hundred bytes on a 64 KB budget; the
+        # guest prefers MOLA_. Removable once no such image is in circulation.
+        fields.update({'HYPERWAKE_' + key.removeprefix('MOLA_'): value for key, value in fields.items()})
         payload = ''.join(key + '=' + shlex.quote(value) + '\n' for key, value in fields.items())
         if len(payload.encode()) > 65536: raise ValueError('Identity payload is too large')
         # Preserved disks live outside active machine metadata and are never overwritten.
