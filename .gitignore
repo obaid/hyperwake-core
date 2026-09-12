@@ -4,9 +4,9 @@ __pycache__/
 *.pyc
 .DS_Store
 
-# Compiled guest daemons. Build them with `make -C guest/hyperwake-guest`.
-guest/hyperwake-guest/bin/
-image/*/bin/hyperwake-guest*
+# Compiled guest daemons. Build them with `make -C guest/mola-guest`.
+guest/mola-guest/bin/
+image/*/bin/
 
 # Decision records: kept locally, not published.
 docs/decisions/
