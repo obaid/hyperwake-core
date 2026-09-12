@@ -3,7 +3,7 @@ import { inspectHost } from '../src/preflight.js';
 import { createServer } from '../src/server.js';
 import { stateDir } from '../src/paths.js';
 import { ensurePython } from '../src/python.js';
-import { downloadImage, manifestUrl } from '../src/image.js';
+import { downloadImage, imageStatus, manifestUrl } from '../src/image.js';
 
 const command = process.argv[2] ?? 'start';
 const port = Number(
@@ -86,6 +86,7 @@ if (command === 'uninstall') {
 
 if (command !== 'start') {
   console.log('usage: mola [start|doctor|mcp|uninstall] [--port=4141]');
+  console.log('       mola start [--refresh-image]');
   console.log('       mola uninstall [--yes] [--keep-image]');
   process.exit(1);
 }
@@ -97,6 +98,41 @@ if (!host.hostReady) {
   console.log(`\n${red('Cannot start.')} ${host.reason}\n`);
   process.exit(1);
 }
+const refresh = process.argv.includes('--refresh-image');
+
+/**
+ * Say when the guest image on disk is behind the published one.
+ *
+ * A cached image is never fetched again, so without this a fix to the guest
+ * would reach new installations and nobody else. Deliberately a notice rather
+ * than an automatic download: the image is about 1.5 GB and starting the engine
+ * is not consent to fetch it.
+ */
+async function reportImageAge() {
+  const status = await imageStatus();
+  if (status.state === 'current' || status.state === 'unknown') return;
+  const why = status.state === 'unrecorded'
+    ? 'predates this check, so it is missing anything fixed since'
+    : `is behind the published ${status.published ?? 'image'}`;
+  console.log(`\n  ${dim('The guest image')} ${why}${dim('.')}`);
+  console.log(`  ${dim('Machines already created keep their own disks and are unaffected.')}`);
+  console.log(`  ${dim('Refresh it with')} mola start --refresh-image\n`);
+}
+
+if (host.image && refresh) {
+  console.log(bold('\nMola engine\n'));
+  console.log('  refreshing the guest image\n');
+  try {
+    await downloadImage();
+  } catch (error) {
+    console.log(`\n${red('Could not fetch the guest image.')} ${error.message}\n`);
+    console.log(`  The image already on disk is untouched.\n`);
+    process.exit(1);
+  }
+} else if (host.image) {
+  await reportImageAge();
+}
+
 if (!host.image) {
   console.log(bold('\nMola engine\n'));
   reportHost(host);

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync, truncateSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
@@ -13,6 +13,9 @@ import { statePath } from './paths.js';
  * a machine with no internet. The manifest names each artifact, its digest and
  * whether it arrives compressed, so the engine never has to guess.
  */
+const ROOTFS_NAME = 'root.ext4';
+const INSTALLED = 'installed.json';
+
 const DEFAULT_MANIFEST = 'https://github.com/obaid/mola-core/releases/download/image-latest/manifest.json';
 
 export function manifestUrl() {
@@ -109,6 +112,54 @@ async function fetchArtifact(artifact, into, base) {
   }
 }
 
+/** Identity of an image: what it calls itself, and what it actually is. */
+function identify(manifest) {
+  const rootfs = (manifest?.artifacts ?? []).find((a) => a.name === ROOTFS_NAME);
+  return { version: manifest?.version ?? null, digest: rootfs?.sha256 ?? null };
+}
+
+/** What is on disk, or null when nothing recorded it. */
+export function installedImage() {
+  try {
+    return identify(JSON.parse(readFileSync(join(imageDir(), INSTALLED), 'utf8')));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether the installed image is behind the published one.
+ *
+ * The version string names the Omarchy release and the architecture, so two
+ * different builds of the same release share it. The comparison is therefore on
+ * the root filesystem's digest, which is the only thing that actually changes
+ * when the image is rebuilt.
+ *
+ * An image with nothing recorded beside it was installed by an engine that did
+ * not write one, which is every engine before this check existed. That is not
+ * ambiguity: it is old, and it is worth saying so.
+ *
+ * Never throws and never blocks. An engine that cannot start because a version
+ * check could not reach the network would be a worse bug than the one this is
+ * here to surface.
+ */
+export async function imageStatus({ url = manifestUrl(), timeout = 4000 } = {}) {
+  const installed = installedImage();
+  if (!installed) return { state: 'unrecorded' };
+
+  try {
+    const response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(timeout) });
+    if (!response.ok) return { state: 'unknown' };
+    const published = identify(await response.json());
+    if (!published.digest || !installed.digest) return { state: 'unknown' };
+    return published.digest === installed.digest
+      ? { state: 'current', version: installed.version }
+      : { state: 'stale', installed: installed.version, published: published.version };
+  } catch {
+    return { state: 'unknown' };
+  }
+}
+
 /**
  * Download a guest image into place, or say why it could not.
  *
@@ -136,6 +187,10 @@ export async function downloadImage({ url = manifestUrl(), log = console.log } =
     for (const artifact of manifest.artifacts) {
       await fetchArtifact(artifact, staging, url);
     }
+    // Record what was installed. Without it there is no way to tell a cached
+    // image apart from the current one, and a cached image is never fetched
+    // again — so a fix to the guest would reach new installations only.
+    writeFileSync(join(staging, INSTALLED), JSON.stringify(manifest, null, 2) + '\n');
     rmSync(final, { recursive: true, force: true });
     renameSync(staging, final);
   } catch (error) {

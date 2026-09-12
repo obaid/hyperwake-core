@@ -106,6 +106,12 @@ curl -s -X POST $API/machines \
     </div>
 
     <div class="box">
+      <span class="lbl">Keeping the guest image current</span>
+      <p>The guest image is downloaded once and then reused, so a machine you create next month is built from the image you fetched today. When a newer one is published the engine says so at startup and leaves it at that: the image is about 1.5&nbsp;GB, and starting the engine is not consent to fetch it.</p>
+      <p><code>npx mola-core start --refresh-image</code> fetches the new one. It downloads to a staging directory and swaps it in only once the checksum matches, so an interrupted refresh leaves the image you already had. Machines that already exist keep their own disks and are not affected either way.</p>
+    </div>
+
+    <div class="box">
       <span class="lbl">Taking it off again</span>
       <p><code>npx mola-core uninstall</code> deletes every machine and its disk, the guest image, the keys and the token, and tells you how much it freed. It shows you the total and asks first. <code>--keep-image</code> clears the machines but keeps the image, so the next one does not re-download it.</p>
       <p>It removes only what Mola created. A virtual machine it did not start is left running.</p>

@@ -131,3 +131,56 @@ test('the image source can be pointed elsewhere', () => {
 test('the image lives inside the state directory', () => {
   assert.ok(imageDir().startsWith(process.env.MOLA_HOME));
 });
+
+/**
+ * A cached guest image is never fetched again, so a fix to the guest reaches
+ * new installations and nobody else unless the engine notices it is behind.
+ *
+ * The version string names the Omarchy release and the architecture, which two
+ * different builds of the same release share, so the comparison has to be on
+ * the root filesystem's digest.
+ */
+test('image staleness is judged on the root filesystem, not the version string', async (t) => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+
+  const home = mkdtempSync(join(tmpdir(), 'mola-image-'));
+  t.after(() => {
+    rmSync(home, { recursive: true, force: true });
+    delete process.env.MOLA_HOME;
+  });
+  process.env.MOLA_HOME = home;
+  mkdirSync(join(home, 'image'), { recursive: true });
+
+  const manifest = (digest) => ({
+    version: 'omarchy-4.0.1-aarch64',
+    artifacts: [{ name: 'root.ext4', sha256: digest }],
+  });
+
+  const { imageStatus, installedImage } = await import(`../src/image.js?${Math.random()}`);
+  const serve = (body) => {
+    global.fetch = async () => new Response(JSON.stringify(body), { status: 200 });
+  };
+  const realFetch = global.fetch;
+  t.after(() => { global.fetch = realFetch; });
+
+  // Nothing recorded: an image installed before this check existed.
+  assert.equal(installedImage(), null);
+  serve(manifest('aaa'));
+  assert.equal((await imageStatus()).state, 'unrecorded');
+
+  writeFileSync(join(home, 'image', 'installed.json'), JSON.stringify(manifest('aaa')));
+
+  serve(manifest('aaa'));
+  assert.equal((await imageStatus()).state, 'current');
+
+  // Same version, rebuilt image. This is the case a version comparison misses.
+  serve(manifest('bbb'));
+  const stale = await imageStatus();
+  assert.equal(stale.state, 'stale');
+
+  // A check that cannot reach the network must never block the engine.
+  global.fetch = async () => { throw new Error('offline'); };
+  assert.equal((await imageStatus()).state, 'unknown');
+});

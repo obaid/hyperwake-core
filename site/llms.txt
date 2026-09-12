@@ -156,6 +156,11 @@ advance, and ask again if they need another.
 ask the user to run `npx mola-core`. Do not try to install or start it yourself;
 it holds their machines and their disks.
 
+**The guest image is cached.** It is fetched once and reused, so machines are
+built from whatever was current when the user installed. If the engine reports
+a newer image at startup, `npx mola-core start --refresh-image` fetches it.
+Existing machines keep their own disks and are unaffected.
+
 **Cleanup.** `npx mola-core uninstall` removes every machine, the guest image,
 keys and token, and reports what it freed.
 

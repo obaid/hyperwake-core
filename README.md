@@ -170,6 +170,21 @@ that made it.
   python/         a private virtualenv for screen capture
 ```
 
+## Keeping the guest image current
+
+The image is downloaded once and reused, so a machine you create next month is
+built from the image you fetched today. When a newer one is published the
+engine says so at startup and stops there: the image is about 1.5 GB, and
+starting the engine is not consent to fetch it.
+
+```sh
+npx mola-core start --refresh-image
+```
+
+It downloads to a staging directory and swaps it in only once the checksum
+matches, so an interrupted refresh leaves the image you already had. Machines
+that already exist keep their own disks either way.
+
 ## Removing it
 
 ```sh
