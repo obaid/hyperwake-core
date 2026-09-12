@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, ftruncateSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, truncateSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { Readable } from 'node:stream';
+import { Readable, Writable } from 'node:stream';
 import { createZstdDecompress } from 'node:zlib';
 import { statePath } from './paths.js';
 
@@ -73,6 +73,65 @@ async function* artifactBytes(artifact, onChunk, base) {
   }
 }
 
+
+/**
+ * Write a stream to disk without storing its zeroes.
+ *
+ * A guest root filesystem is 16 GiB of which about 5 GiB is data; the rest is
+ * unused space inside the filesystem. It compresses to almost nothing, and it
+ * does not need to occupy anything on the host either — but a plain write
+ * stream writes every zero byte literally, so an installation that downloads
+ * 1.5 GB was giving up 16 GB of disk for an image holding a third of that.
+ *
+ * Zero-filled blocks are skipped rather than written, which leaves a hole, and
+ * the file is truncated to its full length at the end so its size is still
+ * right. This is what `zstd -d --sparse` does on the build side; the download
+ * side simply never learned to.
+ *
+ * Nothing downstream verifies the decompressed bytes — the manifest's digest
+ * covers the compressed stream — so this is covered by its own test.
+ */
+function createSparseWriter(path, blockSize = 1 << 20) {
+  const fd = openSync(path, 'w');
+  const zeroes = Buffer.alloc(blockSize);
+  let pending = Buffer.alloc(0);
+  let position = 0;
+
+  const flush = (block) => {
+    // Compare against a zero buffer of the same length rather than scanning
+    // byte by byte; this runs over every byte of a multi-gigabyte image.
+    const empty = block.length === blockSize
+      ? block.equals(zeroes)
+      : block.equals(zeroes.subarray(0, block.length));
+    if (!empty) writeSync(fd, block, 0, block.length, position);
+    position += block.length;
+  };
+
+  return new Writable({
+    write(chunk, _encoding, done) {
+      pending = pending.length ? Buffer.concat([pending, chunk]) : chunk;
+      let offset = 0;
+      while (pending.length - offset >= blockSize) {
+        flush(pending.subarray(offset, offset + blockSize));
+        offset += blockSize;
+      }
+      pending = pending.subarray(offset);
+      done();
+    },
+    final(done) {
+      if (pending.length) flush(pending);
+      // A file whose last blocks were holes would otherwise be short.
+      ftruncateSync(fd, position);
+      closeSync(fd);
+      done();
+    },
+    destroy(error, done) {
+      try { closeSync(fd); } catch { /* already closed by final */ }
+      done(error);
+    },
+  });
+}
+
 /**
  * Fetch one artifact, verifying as the bytes arrive.
  *
@@ -93,8 +152,8 @@ async function fetchArtifact(artifact, into, base) {
 
   const target = join(into, artifact.name);
   const stages = artifact.compression === 'zstd'
-    ? [counted, createZstdDecompress(), createWriteStream(target)]
-    : [counted, createWriteStream(target)];
+    ? [counted, createZstdDecompress(), createSparseWriter(target)]
+    : [counted, createSparseWriter(target)];
 
   await pipeline(...stages);
   if (process.stdout.isTTY) process.stdout.write('\n');
