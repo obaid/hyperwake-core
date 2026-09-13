@@ -223,7 +223,7 @@ an explicit token, the engine creates a private `$MOLA_HOME/host-api.token` file
 The existing operator token does not authorize the private API. Keep the service
 on a private connection (for example an SSH tunnel); do not expose this token or
 the engine directly to tenants. The control panel owns tenant authorization,
-fleet quotas and placement. The host enforces runtime limits and machine fencing.
+account quotas and placement. The host enforces runtime limits and machine fencing.
 
 All requests below use `Authorization: Bearer <host-token>` and JSON. Browser
 Origin headers are refused. Routes are under `/internal/v1`:
@@ -276,7 +276,7 @@ pending operation must be retried and reconciled first. While create/start is
 pending, observations report `starting` (or `unknown` if runtime unavailable);
 pending stop/destroy reports `unknown`. None reports ready or authoritative
 stopped, even if the runtime currently looks stopped, because the accepted
-command may still complete. This prevents premature release of fleet capacity. Never invent a new
+command may still complete. This prevents premature release of account capacity. Never invent a new
 machine ID to recover a timeout.
 
 Destroy leaves a private tombstone and operation history so delayed requests
@@ -303,3 +303,16 @@ The pilot assumes one core process owns a state directory. Keep `machines.json`
 and its tombstones when upgrading, and never run two core processes against that
 same directory. The journal has no garbage collection yet. No public gateway,
 tenant network isolation or billing system is implemented by enabling this API.
+
+
+Hosted SSH uses single-use private CONNECT tickets bound to the current machine
+boot and generation. The control panel authenticates customer SSH keys; core
+accepts only an authenticated gateway's Ed25519 key and never exposes its private
+guest connection details. Snapshot transfer, restore, permanent source fencing
+and retired-ID recreation are documented in [host disk operations](docs/host-storage.md).
+Before enabling hosted restore, prepare the required pinned guest-daemon sidecar
+using [guest-agent image updates](docs/guest-agent-image-update.md).
+
+See [1.2.0 release notes](CHANGELOG.md) for upgrade requirements, including
+cleanly stopping guests managed by an older Linux runtime before its first
+upgrade to persistent QMP sockets. The npm update does not update guest images.
