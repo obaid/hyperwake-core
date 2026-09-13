@@ -339,3 +339,132 @@ test('a status read racing a completed mutation cannot release from its earlier 
   assert.equal((await observation).body.data.status, 'unknown');
   assert.equal(s.machines.get(id).status, 'running');
 });
+
+test('snapshot intent survives lost responses and restore rotates identity exactly once', async t => {
+  const s = setup(t); const id = s.create.id;
+  await s.send('machines', s.create);
+  let failOnce = true, snapshots = 0, restores = 0, seeds = [];
+  s.runtime.storageOperation = async (_id, verb, body) => {
+    if (verb === 'snapshot') { snapshots++; if (failOnce) { failOnce = false; throw new Error('response lost'); } }
+    if (verb === 'restore') restores++;
+    return { id: body.snapshot_id, status: 'stopped' };
+  };
+  s.runtime.reseed = async (_id, body) => seeds.push(body);
+  const snapshot = { ...command(1), snapshot_id: randomUUID() };
+  await assert.rejects(s.send(`machines/${id}/snapshot`, snapshot), /response lost/);
+  await assert.rejects(s.send(`machines/${id}/start`, command(2)), conflict);
+  s.reload();
+  assert.equal((await s.send(`machines/${id}/snapshot`, snapshot)).status, 201);
+  await s.send(`machines/${id}/snapshot`, snapshot);
+  assert.equal(snapshots, 2);
+  const beforeToken = s.api.registry.get(id).registration_token;
+  const restore = { ...command(2), snapshot_id: snapshot.snapshot_id };
+  await s.send(`machines/${id}/restore`, restore);
+  const afterToken = s.api.registry.get(id).registration_token;
+  assert.notEqual(beforeToken, afterToken);
+  assert.equal(seeds[0].registration_token, afterToken);
+  s.reload();
+  await s.send(`machines/${id}/restore`, restore);
+  assert.equal(s.api.registry.get(id).registration_token, afterToken);
+  assert.equal(restores, 1);
+});
+
+test('storage rejects running snapshots, arbitrary paths, stale generations and oversized chunks', async t => {
+  const s = setup(t); const id = s.create.id;
+  await s.send('machines', s.create);
+  await s.send(`machines/${id}/start`, command(2));
+  s.runtime.storageOperation = async () => assert.fail('invalid storage request reached runtime');
+  await assert.rejects(s.send(`machines/${id}/snapshot`, { ...command(2), snapshot_id: randomUUID() }), conflict);
+  await assert.rejects(s.send(`machines/${id}/snapshot`, { ...command(2), snapshot_id: '../../disk' }), e => e.status === 400);
+  await assert.rejects(s.send(`machines/${id}/snapshot-import`, { ...command(1), snapshot_id: randomUUID(), manifest: {} }), conflict);
+  await assert.rejects(s.send(`machines/${id}/snapshot-read`, { snapshot_id: randomUUID(), offset: 0, url: 'http://localhost' }), e => e.status === 400);
+  await assert.rejects(s.send(`machines/${id}/snapshot-write`, { snapshot_id: randomUUID(), offset: 0, sha256: 'a'.repeat(64), data: 'x'.repeat(1048577) }), e => e.status === 400);
+});
+
+test('source fencing is durable before runtime call and blocks delayed successful starts after reload', async t => {
+  const s = setup(t); const id = s.create.id;
+  await s.send('machines', s.create);
+  const start = command(2); await s.send(`machines/${id}/start`, start);
+  let failOnce = true;
+  s.runtime.storageOperation = async (_id, verb) => {
+    assert.equal(verb, 'fence');
+    assert.equal(JSON.parse(readFileSync(s.file, 'utf8'))[id].cloud.fenced, true);
+    if (failOnce) { failOnce = false; throw new Error('connection lost'); }
+    s.machines.get(id).status = 'stopped';
+    return { id, fenced: true, status: 'stopped' };
+  };
+  const fence = command(3);
+  await assert.rejects(s.send(`machines/${id}/fence`, fence), /connection lost/);
+  s.reload();
+  await assert.rejects(s.send(`machines/${id}/start`, start), conflict);
+  await assert.rejects(s.send(`machines/${id}/start`, command(4)), conflict);
+  assert.equal((await s.send(`machines/${id}/fence`, fence)).body.data.fenced, true);
+  s.reload();
+  assert.equal((await s.send(`machines/${id}`, {}, 'GET')).body.data.fenced, true);
+  await assert.rejects(s.send(`machines/${id}/start`, command(10)), conflict);
+});
+
+test('explicit re-creation after deleted disk advances incarnation and rejects every stale lifecycle replay', async t => {
+  const s = setup(t); const id = s.create.id;
+  await s.send('machines', s.create);
+  const start = command(1); await s.send(`machines/${id}/start`, start);
+  const destroy = { ...command(2), delete_disk: true };
+  await s.send(`machines/${id}/destroy`, destroy);
+  const oldToken = s.calls[0][1].registration_token;
+  const recreate = { ...s.create, ...command(3), recreate: true };
+  assert.equal((await s.send('machines', recreate)).body.data.status, 'stopped');
+  assert.notEqual(s.api.registry.get(id).registration_token, oldToken);
+  assert.equal(s.api.registry.get(id).cloud.incarnation_generation, 3);
+  s.reload();
+  assert.equal((await s.send('machines', recreate)).body.data.generation, 3);
+  const before = s.calls.length;
+  await assert.rejects(s.send('machines', s.create), conflict);
+  await assert.rejects(s.send(`machines/${id}/start`, start), conflict);
+  await assert.rejects(s.send(`machines/${id}/destroy`, destroy), conflict);
+  await assert.rejects(s.send(`machines/${id}/shutdown`, command(2)), conflict);
+  await assert.rejects(s.send(`machines/${id}/restore`, { ...command(2), snapshot_id: randomUUID() }), conflict);
+  assert.equal(s.calls.length, before, 'retired operations must never touch new disk');
+  await s.send(`machines/${id}/start`, command(3));
+  assert.equal(s.machines.get(id).status, 'running');
+});
+
+test('re-creation refuses retained disks, live runtime remnants, uncertainty and missing explicit opt-in', async t => {
+  const s = setup(t); const id = s.create.id;
+  await s.send('machines', s.create);
+  await s.send(`machines/${id}/destroy`, { ...command(1), delete_disk: false });
+  await assert.rejects(s.send('machines', { ...s.create, ...command(2), recreate: true }), conflict);
+  const record = s.api.registry.get(id);
+  // Model a separate disk-deleting tombstone without repeating the runtime.
+  const deleted = Object.values(record.cloud.operations).find(value => value.verb === 'destroy');
+  const payload = JSON.parse(deleted.fingerprint); payload.delete_disk = true;
+  deleted.fingerprint = JSON.stringify(payload); deleted.result.body.data.disk_id = null;
+  await assert.rejects(s.send('machines', { ...s.create, ...command(2) }), conflict);
+  await assert.rejects(s.send('machines', { ...s.create, ...command(1), recreate: true }), conflict);
+  s.machines.set(id, { status: 'running' });
+  await assert.rejects(s.send('machines', { ...s.create, ...command(2), recreate: true }), conflict);
+  s.machines.delete(id);
+  s.runtime.describe = async () => { throw new Error('runtime unreachable'); };
+  await assert.rejects(s.send('machines', { ...s.create, ...command(2), recreate: true }), /unreachable/);
+  assert.equal(s.api.registry.get(id).cloud.deleted, true);
+});
+
+test('fenced source can reincarnate only after confirmed deletion and preserve retry identity after create response loss', async t => {
+  const s = setup(t); const id = s.create.id;
+  await s.send('machines', s.create);
+  s.runtime.storageOperation = async () => ({ id, fenced: true, status: 'stopped' });
+  await s.send(`machines/${id}/fence`, command(2));
+  await assert.rejects(s.send('machines', { ...s.create, ...command(3), recreate: true }), conflict);
+  await s.send(`machines/${id}/destroy`, { ...command(2), delete_disk: true });
+  const recreate = { ...s.create, ...command(3), recreate: true };
+  const create = s.runtime.create;
+  let failOnce = true;
+  s.runtime.create = async spec => { await create(spec); if (failOnce) { failOnce = false; throw new Error('reply lost'); } };
+  await assert.rejects(s.send('machines', recreate), /reply lost/);
+  const token = s.api.registry.get(id).registration_token;
+  s.reload();
+  await s.send('machines', recreate);
+  assert.equal(s.api.registry.get(id).registration_token, token);
+  assert.equal(s.api.registry.get(id).cloud.fenced, undefined);
+  await s.send(`machines/${id}/start`, command(3));
+  assert.equal(s.machines.size, 1);
+});

@@ -4,6 +4,8 @@ Only an operator-selected image/runtime may run. Request data never selects a
 host path, command, display backend, or QEMU argument. Guest ports bind loopback.
 """
 import argparse
+import base64
+import gzip
 import hashlib
 import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -87,6 +89,8 @@ class Runner:
         self.accel = accelerator(platform.system(), platform.machine(), self.arch)
         self.qemu = Path(self.config['qemu']).resolve()
         self.image = Path(self.config['image']).resolve()
+        if any((self.image / marker).exists() for marker in ['STAGING_INCOMPLETE', 'STAGING_FAILED']):
+            raise ValueError('Refusing an incomplete or failed prepared image')
         for path in [self.qemu, self.image, self.root]:
             if ',' in str(path) or '\n' in str(path): raise ValueError('QEMU paths cannot contain commas or newlines')
         for name in ['root.ext4', 'vmlinuz-linux', 'initramfs-linux.img']:
@@ -97,13 +101,62 @@ class Runner:
         if self.accel not in capabilities.split(): raise ValueError('QEMU lacks ' + self.accel)
         self.machines = self.root / 'machines'
         self.machines.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.sockets = Path('/tmp') / ('mola-' + str(os.getuid()) + '-' + hashlib.sha256(str(self.root).encode()).hexdigest()[:12]) if platform.system() != 'Windows' else self.root
+        # systemd PrivateTmp creates a new /tmp namespace on service restart.
+        # Linux QEMU processes survive that restart, so their QMP sockets must
+        # live alongside persistent runtime state. macOS needs the short path.
+        self.sockets = self.socket_directory(self.root, platform.system())
+        if platform.system() != 'Windows' and len(os.fsencode(str(self.sockets / ('0' * 36 + '.sock')))) >= 104:
+            raise ValueError('Runtime path is too long for a durable QMP socket; use a shorter MOLA_HOME')
         self.sockets.mkdir(mode=0o700, exist_ok=True)
         if self.sockets.is_symlink() or (platform.system() != 'Windows' and self.sockets.stat().st_uid != os.getuid()):
             raise ValueError('Unsafe socket directory')
         os.chmod(self.sockets, 0o700)
         self.lock = threading.RLock()
+        self.machine_locks = {}
+        self.machine_locks_guard = threading.Lock()
         self.processes = {}
+
+    @staticmethod
+    def socket_directory(root, system):
+        if system == 'Linux': return root / 'sockets'
+        if system == 'Windows': return root
+        return Path('/tmp') / ('mola-' + str(os.getuid()) + '-' + hashlib.sha256(str(root).encode()).hexdigest()[:12])
+
+    @staticmethod
+    def linux_process_identity(pid):
+        # Parse after the final ')' because the comm field may contain spaces
+        # and parentheses. starttime plus the boot UUID protects against PID reuse.
+        boot_id = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+        fields = (Path('/proc') / str(pid) / 'stat').read_text().rsplit(')', 1)[1].split()
+        return {'pid': pid, 'boot_id': boot_id, 'start_ticks': fields[19], 'state': fields[0]}
+
+    def clear_running_marker(self, identifier):
+        (self.folder(identifier) / 'running.marker').unlink(missing_ok=True)
+        if platform.system() != 'Windows': (self.sockets / (identifier + '.sock')).unlink(missing_ok=True)
+        self.sync_directory(self.folder(identifier))
+
+    def known_process_exited(self, marker):
+        if platform.system() != 'Linux': return False
+        try:
+            evidence = json.loads(marker.read_text())
+            if not isinstance(evidence.get('pid'), int) or not evidence.get('boot_id') or not evidence.get('start_ticks'): return False
+            current_boot = Path('/proc/sys/kernel/random/boot_id').read_text().strip()
+            if current_boot != evidence['boot_id']: return True
+            try: current = self.linux_process_identity(evidence['pid'])
+            except FileNotFoundError: return True
+            return current['start_ticks'] != evidence['start_ticks'] or current['state'] in ('Z', 'X')
+        except (OSError, ValueError, KeyError, IndexError, TypeError):
+            # An old empty marker, incomplete launch receipt, permissions failure
+            # or malformed /proc observation supplies no stopped evidence.
+            return False
+
+    def machine_lock(self, identifier):
+        self.folder(identifier)  # Validate IDs before allocating lock entries.
+        # Test fixtures may construct a runner without launching QEMU setup.
+        if not hasattr(self, 'machine_locks'):
+            self.machine_locks, self.machine_locks_guard = {}, threading.Lock()
+        with self.machine_locks_guard:
+            return self.machine_locks.setdefault(identifier, threading.RLock())
 
     def folder(self, identifier):
         if not isinstance(identifier, str) or not ID.fullmatch(identifier): raise ValueError('Invalid computer id')
@@ -145,7 +198,7 @@ class Runner:
         process = self.processes.get(data['id'])
         if process is not None and process.poll() is not None:
             self.processes.pop(data['id'], None)
-            (self.folder(data['id']) / 'running.marker').unlink(missing_ok=True)
+            self.clear_running_marker(data['id'])
             return 'stopped'
         try:
             state = self.qmp(data, 'query-status')['status']
@@ -153,17 +206,30 @@ class Runner:
         except (OSError, KeyError):
             # A live child without its management socket is never declared stopped.
             if process is not None: return 'starting'
-            if (self.folder(data['id']) / 'running.marker').exists(): return 'unknown'
+            marker = self.folder(data['id']) / 'running.marker'
+            if marker.exists():
+                if self.known_process_exited(marker):
+                    self.clear_running_marker(data['id'])
+                    return 'stopped'
+                return 'unknown'
             if platform.system() != 'Windows' and (self.sockets / (data['id'] + '.sock')).exists(): return 'unknown'
             return 'stopped'
 
     def describe(self, identifier):
-        data = self.metadata(identifier)
-        status = self.status(data)
-        return {'provider_vm_id': identifier, 'status': status, 'disk_id': identifier,
-                'display_host': self.config.get('connect_host', 'host.docker.internal'),
-                'display_port': data['vnc_port'], 'ssh_host': self.config.get('connect_host', 'host.docker.internal'),
-                'ssh_port': data['ssh_port'], 'meta': {'runtime': self.accel, 'architecture': self.arch}}
+        lock = self.machine_lock(identifier)
+        if not lock.acquire(blocking=False):
+            # A long disk operation on this machine is uncertain. Do not wait
+            # behind it or expose a stale stopped observation as release proof.
+            return {'provider_vm_id': identifier, 'status': 'unknown', 'disk_id': identifier,
+                    'meta': {'runtime': self.accel, 'architecture': self.arch}}
+        try:
+            data = self.metadata(identifier)
+            status = self.status(data)
+            return {'provider_vm_id': identifier, 'status': status, 'disk_id': identifier,
+                    'display_host': self.config.get('connect_host', 'host.docker.internal'),
+                    'display_port': data['vnc_port'], 'ssh_host': self.config.get('connect_host', 'host.docker.internal'),
+                    'ssh_port': data['ssh_port'], 'meta': {'runtime': self.accel, 'architecture': self.arch}}
+        finally: lock.release()
 
     def create(self, spec):
         identifier = spec['computer_id']
@@ -266,6 +332,7 @@ class Runner:
 
     def start(self, identifier):
         data = self.metadata(identifier)
+        if data.get('fenced'): raise ValueError('Machine is fenced and cannot start on this host')
         current = self.status(data)
         if current in ('running', 'starting'): return self.describe(identifier)
         if current != 'stopped': raise ValueError('Machine state is uncertain; inspect it before starting')
@@ -280,8 +347,26 @@ class Runner:
         log = (folder / 'runtime.log').open('ab')
         options = {'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP} if platform.system() == 'Windows' else {'start_new_session': True}
         try:
-            if platform.system() == 'Windows': (folder / 'running.marker').touch(mode=0o600)
-            self.processes[identifier] = subprocess.Popen(self.command(data), stdin=subprocess.DEVNULL, stdout=log, stderr=log, **options)
+            # Save intent before Popen: a crash during launch is uncertain,
+            # never evidence that the guest stopped.
+            write_json(folder / 'running.marker', {'launching': True})
+            self.sync_directory(folder)
+            try:
+                process = subprocess.Popen(self.command(data), stdin=subprocess.DEVNULL, stdout=log, stderr=log, **options)
+            except Exception:
+                # Popen returned an error, so no child was successfully created.
+                self.clear_running_marker(identifier)
+                raise
+            self.processes[identifier] = process
+            if platform.system() == 'Linux':
+                try:
+                    identity = self.linux_process_identity(process.pid)
+                    write_json(folder / 'running.marker', identity)
+                    self.sync_directory(folder)
+                except (OSError, ValueError, IndexError):
+                    # The live Popen object can still prove exit; if this process
+                    # crashes first, retain the conservative launch marker.
+                    pass
         finally: log.close()
         time.sleep(0.3)
         if self.processes[identifier].poll() is not None:
@@ -312,9 +397,222 @@ class Runner:
                 (folder / 'root.ext4').rename(retained)
         shutil.rmtree(folder)
 
+    def reseed(self, identifier, payload):
+        self.require_stopped(identifier)
+        fields = {'MOLA_ENDPOINT': json.loads(self.config_path.read_text())['guest_endpoint'],
+                  'MOLA_REGISTRATION_TOKEN': payload['registration_token'],
+                  'MOLA_COMPUTER_ID': identifier, 'MOLA_MACHINE_NAME': payload['name'],
+                  'MOLA_AUTHORIZED_KEYS': '\n'.join(payload['authorized_keys'])}
+        if any(not isinstance(value, str) or '\x00' in value for value in fields.values()): raise ValueError('Invalid identity')
+        fields.update({'HYPERWAKE_' + key.removeprefix('MOLA_'): value for key, value in fields.items()})
+        text = ''.join(key + '=' + shlex.quote(value) + '\n' for key, value in fields.items())
+        temporary = self.folder(identifier) / 'identity.new'
+        seed_disk(temporary, text)
+        with temporary.open('rb') as stream: os.fsync(stream.fileno())
+        temporary.replace(self.folder(identifier) / 'identity.img')
+        self.sync_directory(self.folder(identifier))
+        return {'id': identifier, 'reseeded': True}
+
+    def storage_path(self, identifier, snapshot_id):
+        self.metadata(identifier)
+        if not isinstance(snapshot_id, str) or not ID.fullmatch(snapshot_id):
+            raise ValueError('Invalid snapshot id')
+        folder = self.root / 'snapshots' / identifier / snapshot_id
+        if any(path.is_symlink() for path in [folder, folder.parent, folder.parent.parent]):
+            raise ValueError('Unsafe snapshot directory')
+        return folder
+
+    def require_stopped(self, identifier):
+        if self.status(self.metadata(identifier)) != 'stopped':
+            raise ValueError('Stop the computer before changing its disk')
+
+    def snapshot_manifest(self, identifier, snapshot_id):
+        folder = self.storage_path(identifier, snapshot_id)
+        manifest = json.loads((folder / 'manifest.json').read_text())
+        if manifest.get('id') != snapshot_id or not (folder / 'disk.gz').is_file():
+            raise ValueError('Snapshot is not complete')
+        return manifest
+
+    def snapshot(self, identifier, payload):
+        self.require_stopped(identifier)
+        snapshot_id = payload['snapshot_id']
+        folder = self.storage_path(identifier, snapshot_id)
+        if (folder / 'manifest.json').exists(): return self.snapshot_manifest(identifier, snapshot_id)
+        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+        source = self.folder(identifier) / 'root.ext4'
+        target = folder / 'disk.gz.partial'
+        digest = hashlib.sha256()
+        with source.open('rb') as disk, target.open('wb') as raw:
+            with gzip.GzipFile(fileobj=raw, mode='wb', compresslevel=1, mtime=0) as compressed:
+                for chunk in iter(lambda: disk.read(1024 * 1024), b''):
+                    digest.update(chunk); compressed.write(chunk)
+            raw.flush(); os.fsync(raw.fileno())
+        target.replace(folder / 'disk.gz')
+        manifest = {'id': snapshot_id, 'format': 'mola-raw-gzip-v1', 'architecture': self.arch,
+                    'size_bytes': source.stat().st_size, 'sha256': digest.hexdigest(),
+                    'artifact_bytes': (folder / 'disk.gz').stat().st_size,
+                    'artifact_sha256': self.file_digest(folder / 'disk.gz'), 'created_at': int(time.time())}
+        write_json(folder / 'manifest.json', manifest)
+        self.sync_directory(folder)
+        return manifest
+
+    @staticmethod
+    def file_digest(path):
+        digest = hashlib.sha256()
+        with path.open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''): digest.update(chunk)
+        return digest.hexdigest()
+
+    def restore_snapshot(self, identifier, payload):
+        self.require_stopped(identifier)
+        folder = self.storage_path(identifier, payload['snapshot_id'])
+        manifest = self.snapshot_manifest(identifier, payload['snapshot_id'])
+        self.validate_snapshot_manifest(identifier, manifest)
+        if self.file_digest(folder / 'disk.gz') != manifest['artifact_sha256']:
+            raise ValueError('Snapshot artifact checksum mismatch')
+        destination = self.folder(identifier) / 'root.ext4'
+        temporary = destination.with_suffix('.restore')
+        digest, total = hashlib.sha256(), 0
+        try:
+            with gzip.open(folder / 'disk.gz', 'rb') as source, temporary.open('wb') as target:
+                for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                    total += len(chunk)
+                    if total > manifest['size_bytes']: raise ValueError('Snapshot exceeds declared disk size')
+                    digest.update(chunk)
+                    if chunk.strip(b'\0'): target.write(chunk)
+                    else: target.seek(len(chunk), 1)
+                target.truncate(total); target.flush(); os.fsync(target.fileno())
+            if total != manifest['size_bytes'] or digest.hexdigest() != manifest['sha256']:
+                raise ValueError('Snapshot disk checksum mismatch')
+            if self.config.get('guest_agent_refresh', False):
+                # The archive may contain an old daemon that cannot re-enrol
+                # after credential rotation. Verify original snapshot bytes
+                # first, then refresh only the operator-managed guest agent.
+                subprocess.run(['python3', str(Path(__file__).with_name('refresh_guest_agent.py')),
+                                '--image', str(self.image), '--disk', str(temporary), '--architecture', self.arch],
+                               check=True, capture_output=True, timeout=900)
+                with temporary.open('rb') as stream: os.fsync(stream.fileno())
+            self.require_stopped(identifier)
+            temporary.replace(destination)
+            self.sync_directory(destination.parent)
+        finally: temporary.unlink(missing_ok=True)
+        return {'id': identifier, 'snapshot_id': manifest['id'], 'status': 'stopped',
+                'snapshot_sha256': manifest['sha256'], 'guest_agent_refreshed': bool(self.config.get('guest_agent_refresh', False))}
+
+    @staticmethod
+    def sync_directory(path):
+        if platform.system() == 'Windows': return
+        descriptor = os.open(path, os.O_RDONLY)
+        try: os.fsync(descriptor)
+        finally: os.close(descriptor)
+
+    def validate_snapshot_manifest(self, identifier, manifest):
+        if not isinstance(manifest, dict): raise ValueError('Invalid snapshot manifest')
+        if manifest.get('format') != 'mola-raw-gzip-v1' or manifest.get('architecture') != self.arch:
+            raise ValueError('Snapshot format or architecture mismatch')
+        limit = (self.folder(identifier) / 'root.ext4').stat().st_size
+        if type(manifest.get('size_bytes')) is not int or not 1 <= manifest['size_bytes'] <= limit:
+            raise ValueError('Snapshot disk exceeds target allocation')
+        if type(manifest.get('artifact_bytes')) is not int or not 1 <= manifest['artifact_bytes'] <= limit + 1024 * 1024 * 1024:
+            raise ValueError('Snapshot artifact exceeds target allocation')
+        for key in ['sha256', 'artifact_sha256']:
+            if not isinstance(manifest.get(key), str) or not re.fullmatch('[0-9a-f]{64}', manifest[key]):
+                raise ValueError('Invalid snapshot checksum')
+
+    def import_snapshot(self, identifier, payload):
+        snapshot_id, manifest = payload['snapshot_id'], payload['manifest']
+        self.validate_snapshot_manifest(identifier, manifest)
+        if manifest.get('id') != snapshot_id: raise ValueError('Snapshot identity mismatch')
+        folder = self.storage_path(identifier, snapshot_id)
+        if (folder / 'manifest.json').exists():
+            if self.snapshot_manifest(identifier, snapshot_id) != manifest: raise ValueError('Snapshot already exists with different content')
+            return {'offset': manifest['artifact_bytes'], 'complete': True}
+        folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+        intent = folder / 'import.json'
+        if intent.exists() and json.loads(intent.read_text()) != manifest: raise ValueError('Import already holds a different manifest')
+        write_json(intent, manifest)
+        target = folder / 'upload.partial'
+        target.touch(mode=0o600, exist_ok=True)
+        return {'offset': target.stat().st_size, 'complete': False}
+
+    def write_snapshot_chunk(self, identifier, payload):
+        folder = self.storage_path(identifier, payload['snapshot_id'])
+        manifest = json.loads((folder / 'import.json').read_text())
+        offset = payload['offset']
+        if type(offset) is not int or offset < 0: raise ValueError('Invalid chunk offset')
+        encoded = payload.get('data')
+        if not isinstance(encoded, str) or len(encoded) > 1048576: raise ValueError('Chunk exceeds 768 KiB')
+        chunk = base64.b64decode(encoded, validate=True)
+        if not chunk or hashlib.sha256(chunk).hexdigest() != payload.get('sha256'): raise ValueError('Chunk checksum mismatch')
+        if offset + len(chunk) > manifest['artifact_bytes']: raise ValueError('Chunk exceeds artifact size')
+        if (folder / 'manifest.json').exists():
+            target = folder / 'disk.gz'
+        else: target = folder / 'upload.partial'
+        with target.open('r+b') as stream:
+            size = target.stat().st_size
+            if offset > size: raise ValueError('Chunks must be uploaded sequentially')
+            stream.seek(offset)
+            if offset < size:
+                if offset + len(chunk) > size or stream.read(len(chunk)) != chunk: raise ValueError('Retry chunk differs from stored bytes')
+            else:
+                stream.write(chunk); stream.flush(); os.fsync(stream.fileno())
+        return {'offset': max(size, offset + len(chunk))}
+
+    def seal_snapshot(self, identifier, payload):
+        folder = self.storage_path(identifier, payload['snapshot_id'])
+        if (folder / 'manifest.json').exists(): return self.snapshot_manifest(identifier, payload['snapshot_id'])
+        manifest = json.loads((folder / 'import.json').read_text())
+        target = folder / 'upload.partial'
+        if not target.exists() and (folder / 'disk.gz').exists(): target = folder / 'disk.gz'
+        if target.stat().st_size != manifest['artifact_bytes'] or self.file_digest(target) != manifest['artifact_sha256']:
+            raise ValueError('Incomplete snapshot or artifact checksum mismatch')
+        target.replace(folder / 'disk.gz')
+        write_json(folder / 'manifest.json', manifest)
+        self.sync_directory(folder)
+        return manifest
+
+    def read_snapshot_chunk(self, identifier, payload):
+        manifest = self.snapshot_manifest(identifier, payload['snapshot_id'])
+        offset = payload['offset']
+        if type(offset) is not int or not 0 <= offset < manifest['artifact_bytes']: raise ValueError('Invalid chunk offset')
+        with (self.storage_path(identifier, payload['snapshot_id']) / 'disk.gz').open('rb') as stream:
+            stream.seek(offset); chunk = stream.read(768 * 1024)
+        return {'offset': offset, 'next_offset': offset + len(chunk), 'data': base64.b64encode(chunk).decode(),
+                'sha256': hashlib.sha256(chunk).hexdigest(), 'eof': offset + len(chunk) == manifest['artifact_bytes']}
+
+    def delete_snapshot(self, identifier, payload):
+        folder = self.storage_path(identifier, payload['snapshot_id'])
+        if folder.exists(): shutil.rmtree(folder)
+        return {'id': payload['snapshot_id'], 'deleted': True}
+
+    def fence(self, identifier, payload):
+        data = self.metadata(identifier)
+        data['fenced'] = True
+        write_json(self.folder(identifier) / 'machine.json', data)
+        self.sync_directory(self.folder(identifier))
+        self.stop(identifier, force=True)
+        for _ in range(100):
+            if self.status(self.metadata(identifier)) == 'stopped': return {'id': identifier, 'fenced': True, 'status': 'stopped'}
+            time.sleep(0.1)
+        raise ValueError('Fencing has not established stopped state')
+
+    def storage_operation(self, identifier, verb, payload):
+        operations = {'snapshot': self.snapshot, 'restore': self.restore_snapshot,
+                      'snapshot-delete': self.delete_snapshot, 'snapshot-import': self.import_snapshot,
+                      'snapshot-write': self.write_snapshot_chunk, 'snapshot-seal': self.seal_snapshot,
+                      'snapshot-read': self.read_snapshot_chunk, 'fence': self.fence}
+        return operations[verb](identifier, payload)
+
     def list(self):
-        return {folder.name: self.status(self.metadata(folder.name)) for folder in self.machines.iterdir()
-                if ID.fullmatch(folder.name) and (folder / 'machine.json').exists()}
+        result = {}
+        for folder in self.machines.iterdir():
+            if ID.fullmatch(folder.name) and (folder / 'machine.json').exists():
+                try: result[folder.name] = self.describe(folder.name)['status']
+                except FileNotFoundError:
+                    # A concurrent completed destroy can remove metadata between
+                    # directory enumeration and acquiring that machine's lock.
+                    pass
+        return result
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -331,22 +629,35 @@ class Handler(BaseHTTPRequestHandler):
             if self.headers.get('Origin'):
                 return self.reply(403, {'error': 'Browser origins are not accepted'})
             size = int(self.headers.get('Content-Length', '0'))
-            if size < 0 or size > 131072: return self.reply(413, {'error': 'Request too large'})
+            if size < 0 or size > 1572864: return self.reply(413, {'error': 'Request too large'})
             self.connection.settimeout(10)
             payload = json.loads(self.rfile.read(size)) if size else {}
             parts = self.path.strip('/').split('/')
             runner = self.server.runner
-            with runner.lock:
-                if self.command == 'GET' and parts == ['health']:
-                    result = {'ready': True, 'architecture': runner.arch, 'accelerator': runner.accel}
-                elif parts == ['machines'] and self.command == 'GET': result = runner.list()
-                elif parts == ['machines'] and self.command == 'POST': result = runner.create(payload)
+            # Storage compression may hold the mutation lock for minutes. A
+            # responsive supervisor must not look dead during that work.
+            if self.command == 'GET' and parts == ['health']:
+                return self.reply(200, {'ready': True, 'architecture': runner.arch, 'accelerator': runner.accel})
+            if self.command == 'GET' and parts == ['machines']:
+                return self.reply(200, runner.list())
+            if self.command == 'GET' and len(parts) == 2 and parts[0] == 'machines':
+                return self.reply(200, runner.describe(parts[1]))
+            identifier = payload.get('computer_id') if parts == ['machines'] and self.command == 'POST' else (parts[1] if len(parts) >= 2 and parts[0] == 'machines' else None)
+            machine_lock = runner.machine_lock(identifier) if identifier is not None else threading.RLock()
+            # Keep host resource allocation serialized while readers for other
+            # computers remain responsive during a large snapshot or restore.
+            with machine_lock, runner.lock:
+                if parts == ['machines'] and self.command == 'POST': result = runner.create(payload)
+                elif len(parts) == 4 and parts[0] == 'machines' and parts[2] == 'snapshots' and self.command == 'GET': result = runner.snapshot_manifest(parts[1], parts[3])
                 elif len(parts) == 2 and parts[0] == 'machines' and self.command == 'GET': result = runner.describe(parts[1])
                 elif len(parts) == 2 and parts[0] == 'machines' and self.command == 'DELETE':
                     if type(payload.get('delete_disk')) is not bool: raise ValueError('delete_disk must be explicitly true or false')
                     runner.destroy(parts[1], payload['delete_disk']); result = {'ok': True}
                 elif len(parts) == 3 and parts[0] == 'machines' and self.command == 'POST':
-                    if parts[2] == 'start': result = runner.start(parts[1])
+                    if parts[2] in ('snapshot', 'restore', 'snapshot-delete', 'snapshot-import', 'snapshot-write', 'snapshot-seal', 'snapshot-read', 'fence'):
+                        result = runner.storage_operation(parts[1], parts[2], payload)
+                    elif parts[2] == 'reseed': result = runner.reseed(parts[1], payload)
+                    elif parts[2] == 'start': result = runner.start(parts[1])
                     elif parts[2] in ('shutdown', 'force-stop'):
                         runner.stop(parts[1], parts[2] == 'force-stop'); result = {'ok': True}
                     else: return self.reply(404, {'error': 'Unknown operation'})

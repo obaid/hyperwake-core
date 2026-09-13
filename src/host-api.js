@@ -3,6 +3,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { statePath } from './paths.js';
 import { authorised, validateSpec, validateAction } from './api.js';
 import { revokeDesktop } from './desktop.js';
+import { handleSsh, revokeSsh } from './ssh.js';
+import { storageOperation, STORAGE_VERBS } from './host-storage.js';
 
 const fail = (status, message, code) => { throw Object.assign(new Error(message), { status, code }); };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -34,13 +36,13 @@ export function hostDescription(record, runtime, settledOperationKey = null) {
   const heartbeat = Date.parse(record.last_heartbeat_at || '');
   const afterStart = heartbeat >= Date.parse(record.cloud?.boot_requested_at || '');
   const caps = record.capabilities;
-  const ready = status === 'running' && record.desired_state === 'running'
+  const ready = !record.cloud.fenced && status === 'running' && record.desired_state === 'running'
     && Boolean(record.boot_id) && !record.cloud?.previous_boot_ids?.includes(record.boot_id)
     && afterStart && heartbeat <= Date.now() && Date.now() - heartbeat < 60_000
     && Boolean(caps?.shell && caps?.display && caps?.sshd);
   return {
     id: record.id, name: record.name, status, disk_id: runtime?.disk_id ?? record.id,
-    generation: record.cloud.generation, image_ref: record.cloud.image_ref,
+    generation: record.cloud.generation, fenced: Boolean(record.cloud.fenced), image_ref: record.cloud.image_ref,
     vcpus: record.vcpus, memory_mb: record.memory_mb, disk_gb: record.disk_gb,
     ready, boot_id: record.boot_id ?? null, capabilities: caps ?? null,
     last_heartbeat_at: record.last_heartbeat_at ?? null,
@@ -95,10 +97,17 @@ export class HostApi {
     if (method === 'GET' && parts.length === 2) {
       return { status: 200, body: { data: await this.describe(this.record(parts[1])) } };
     }
+    if (method === 'GET' && parts.length === 4 && parts[2] === 'snapshots') {
+      this.record(parts[1]);
+      if (!UUID.test(parts[3] || '')) fail(400, 'snapshot_id must be a UUID.');
+      return { status: 200, body: { data: await this.runtime.snapshotManifest(parts[1], parts[3]) } };
+    }
     if (method !== 'POST') fail(405, 'Method not allowed.');
     const verb = parts.length === 1 ? 'create' : parts[2];
     const id = verb === 'create' ? body.id : parts[1];
     if (!UUID.test(id || '')) fail(400, 'id must be a UUID.');
+    if (parts.length === 3 && verb === 'ssh') return this.locked(id, () => handleSsh(this, id, body));
+    if (parts.length === 3 && STORAGE_VERBS.includes(verb)) return this.locked(id, () => storageOperation(this, id, verb, body));
     if (parts.length === 3 && ['desktop', 'actions'].includes(verb)) {
       return this.locked(id, async () => {
         const record = this.record(id);
@@ -133,9 +142,10 @@ export class HostApi {
     if (!Number.isSafeInteger(body.generation) || body.generation < 1) fail(400, 'generation must be a positive integer.');
     if (typeof body.operation_id !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(body.operation_id)) fail(400, 'operation_id is required (letters, numbers, underscores or hyphens; maximum 128).');
     const allowed = verb === 'create'
-      ? ['id', 'name', 'vcpus', 'memory_mb', 'disk_gb', 'image_ref', 'operation_id', 'generation']
+      ? ['id', 'name', 'vcpus', 'memory_mb', 'disk_gb', 'image_ref', 'operation_id', 'generation', 'recreate']
       : ['operation_id', 'generation', ...(verb === 'destroy' ? ['delete_disk'] : [])];
     if (Object.keys(body).some(key => !allowed.includes(key))) fail(400, 'Unknown operation field.');
+    if (verb === 'create' && Object.hasOwn(body, 'recreate') && typeof body.recreate !== 'boolean') fail(400, 'recreate must be a boolean.');
     if (verb === 'destroy' && typeof body.delete_disk !== 'boolean') fail(400, 'destroy requires explicit delete_disk.');
     let spec;
     if (verb === 'create') {
@@ -145,6 +155,10 @@ export class HostApi {
     const fingerprint = canonical(body);
     const key = `${verb}:${body.operation_id}`;
     let record = this.registry.get(id);
+    // An ID reused after confirmed disk deletion is a new incarnation. Old
+    // completed replies must not describe this new disk as deleted or running.
+    if (record?.cloud?.incarnation_generation && body.generation < record.cloud.incarnation_generation) fail(409, 'Operation belongs to a retired machine incarnation.');
+    if (verb === 'start' && record?.cloud?.fenced) fail(409, 'Machine is fenced and cannot start on this host.');
     const existing = record?.cloud?.operations?.[key];
     if (existing) {
       if (existing.fingerprint !== fingerprint) fail(409, 'Operation ID was already used with a different payload.');
@@ -153,7 +167,25 @@ export class HostApi {
     } else {
       if (verb === 'create' && body.image_ref !== this.imageRef) fail(409, 'Requested image is not installed on this host.');
       if (record && !record.cloud) fail(409, 'ID belongs to a local machine.');
-      if (verb === 'create' && record) fail(409, 'Machine ID is already reserved.');
+      let reincarnating = false;
+      if (verb === 'create' && record) {
+        const removedDisk = Object.values(record.cloud.operations || {}).some(operation => {
+          if (operation.verb !== 'destroy' || !operation.result) return false;
+          const payload = JSON.parse(operation.fingerprint);
+          return payload.generation === record.cloud.generation && payload.delete_disk === true
+            && operation.result.body?.data?.deleted === true && operation.result.body?.data?.disk_id === null;
+        });
+        if (body.recreate !== true || record.cloud.deleted !== true || !removedDisk || body.generation <= record.cloud.generation) fail(409, 'Machine ID is already reserved; re-creation requires confirmed disk deletion and a higher generation.');
+        const held = await this.runtime.list();
+        if (Object.hasOwn(held, id)) fail(409, 'Retired machine is still held by the runtime.');
+        try {
+          await this.runtime.describe(id);
+          fail(409, 'Retired machine still exists in the runtime.');
+        } catch (error) {
+          if (error.status !== 404) throw error;
+        }
+        reincarnating = true;
+      }
       if (verb !== 'create' && (!record || record.cloud.deleted)) fail(404, 'No such managed machine.', 'machine_not_found');
       if (record && body.generation < record.cloud.generation) fail(409, 'Stale boot generation.');
       if (record && verb === 'start' && body.generation === record.cloud.generation) {
@@ -170,14 +202,16 @@ export class HostApi {
       // Do not let a later command overtake an ambiguous runtime call. The CP
       // must retry/reconcile that intent first, including after a process crash.
       if (record && Object.values(record.cloud.operations).some(operation => !operation.result)) fail(409, 'A pending operation must be reconciled first.');
-      if (!record) {
+      if (!record || reincarnating) {
+        const previousOperations = record?.cloud?.operations || {};
         const held = await this.runtime.list();
         if (Object.hasOwn(held, id)) fail(409, 'ID is already held by the runtime.');
         record = {
           id, ...spec, created_at: new Date().toISOString(), registration_token: randomUUID().replaceAll('-', ''),
           authorized_keys: [this.publicKey], machine_token_hash: null, boot_id: null,
           capabilities: null, last_heartbeat_at: null, desired_state: 'stopped',
-          cloud: { image_ref: body.image_ref, operations: {}, create_spec: spec },
+          cloud: { image_ref: body.image_ref, operations: previousOperations, create_spec: spec,
+            ...(reincarnating ? { incarnation_generation: body.generation } : {}) },
         };
         this.registry.records[id] = record;
       }
@@ -187,7 +221,7 @@ export class HostApi {
       this.registry.flush();
     }
     const operation = record.cloud.operations[key];
-    if (verb !== 'create') revokeDesktop(id);
+    if (verb !== 'create') { revokeDesktop(id); revokeSsh(id); }
     if (verb === 'create') {
       if (record.cloud.image_ref !== this.imageRef) fail(409, 'Pending create requires its original installed image.');
       await this.runtime.create({ computer_id: id, ...record.cloud.create_spec,

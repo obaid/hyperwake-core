@@ -49,16 +49,17 @@ func (r *recordingShutdowner) wasCalled() bool {
 type controlPlane struct {
 	mu sync.Mutex
 
-	registrationUsed bool
-	currentToken     string
-	desiredState     string
-	rotateOnBeat     int
-	beats            int
-	registers        int
-	shutdownAcks     int
-	failBeats        int // fail this many heartbeats before succeeding
-	lastAuth         string
-	lastSessions     client.Sessions
+	registrationUsed          bool
+	requiredRegistrationToken string
+	currentToken              string
+	desiredState              string
+	rotateOnBeat              int
+	beats                     int
+	registers                 int
+	shutdownAcks              int
+	failBeats                 int // fail this many heartbeats before succeeding
+	lastAuth                  string
+	lastSessions              client.Sessions
 }
 
 func newControlPlane() *controlPlane {
@@ -75,6 +76,10 @@ func (c *controlPlane) handler() http.Handler {
 
 		var req client.RegisterRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
+		if c.requiredRegistrationToken != "" && req.RegistrationToken != c.requiredRegistrationToken {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 
 		if c.registrationUsed {
 			w.WriteHeader(http.StatusConflict)
@@ -400,26 +405,57 @@ func TestHeartbeatBacksOffAndRecovers(t *testing.T) {
 	}
 }
 
-// A rejected credential must stop the daemon reusing it, not loop forever.
-func TestRejectedCredentialIsClearedAndFatal(t *testing.T) {
+// Revoked credentials must be cleared before retry; cancellation must stop
+// recovery rather than continuing to replay either credential.
+func TestRejectedCredentialIsClearedAndRecoveryCanBeCancelled(t *testing.T) {
 	plane := newControlPlane()
 	h := newHarness(t, plane)
-	ctx := context.Background()
-
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	if err := h.daemon.ensureRegistered(ctx); err != nil {
 		t.Fatal(err)
 	}
-
-	// The control plane rotates its expectation without telling the guest.
 	plane.snapshot(func(c *controlPlane) { c.currentToken = "some-other-token" })
-
-	err := h.daemon.Run(ctx)
-	if !errors.Is(err, client.ErrUnauthorized) {
-		t.Fatalf("Run returned %v, want ErrUnauthorized", err)
+	h.daemon.sleep = func(context.Context, time.Duration) { cancel() }
+	if err := h.daemon.Run(ctx); err != nil {
+		t.Fatal(err)
 	}
-
 	if got := h.store.MachineToken(); got != "" {
-		t.Fatalf("credential %q was not cleared after rejection", got)
+		t.Fatal("rejected credential was retained")
+	}
+	if plane.beats != 1 {
+		t.Fatalf("rejected credential was replayed %d times", plane.beats)
+	}
+}
+
+func TestRestoredCredentialReenrollsWithCurrentBootSeedAndResumesHeartbeats(t *testing.T) {
+	plane := newControlPlane()
+	plane.currentToken = "new-machine-credential"
+	plane.requiredRegistrationToken = "new-seed-from-identity-volume"
+	plane.desiredState = "stopped" // exit after the first successful heartbeat
+	h := newHarness(t, plane)
+	h.daemon.cfg.RegistrationToken = plane.requiredRegistrationToken
+	h.daemon.cfg.ComputerID = "computer-uuid"
+	if err := h.store.SetComputerID("computer-uuid"); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.SetMachineToken("cached-before-restore"); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.daemon.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if plane.registers != 1 || plane.beats != 2 {
+		t.Fatalf("registers=%d beats=%d; expected one re-enrollment after one rejected heartbeat", plane.registers, plane.beats)
+	}
+	if h.store.MachineToken() != plane.currentToken {
+		t.Fatal("new credential was not persisted")
+	}
+	if !h.shutdown.wasCalled() {
+		t.Fatal("recovered daemon did not process successful heartbeat")
+	}
+	if len(h.slept) == 0 || h.slept[0] <= 0 {
+		t.Fatal("recovery must back off before retrying")
 	}
 }
 

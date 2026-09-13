@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Stage a guest-daemon-only golden-image revision; never activate or edit source.
+
+Input must be an unbooted prepared factory image, never a customer's VM disk.
+The source remains the rollback copy. Kernel/initramfs bytes remain identical.
+"""
+import argparse
+from datetime import datetime, timezone
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'runtime/native'))
+from refresh_guest_agent import debugfs, digest, fsck, refresh, validate_binary
+
+
+def write_json(path, value):
+    with path.open('x') as stream:
+        json.dump(value, stream, indent=2); stream.write('\n'); stream.flush(); os.fsync(stream.fileno())
+    path.chmod(0o600)
+
+
+def stage(source, binary, output, version, expected_digest, architecture):
+    source, binary, output = source.resolve(), binary.resolve(), output.resolve()
+    if not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._+-]{0,100}', version): raise ValueError('Use a short filesystem-safe image version')
+    if output.exists() or output.is_symlink(): raise ValueError('Output exists; choose a fresh versioned directory')
+    if not source.is_dir() or source == output or source in output.parents: raise ValueError('Source and staging output must be separate directories')
+    for marker in ['machine.json', 'identity.img', 'running.marker', 'intent.json']:
+        if (source / marker).exists(): raise ValueError('Refusing a machine directory; use an unbooted factory image')
+    required = ['root.ext4', 'vmlinuz-linux', 'initramfs-linux.img']
+    for name in required:
+        path = source / name
+        if path.is_symlink() or not path.is_file(): raise ValueError('Factory image must contain regular root, kernel and initramfs files')
+    validate_binary(binary, architecture, expected_digest)
+    disk = source / 'root.ext4'
+    # Known first-boot identity paths are a guardrail, not a secret-scrubbing
+    # system. Only the operator's known unbooted factory is a valid source.
+    for base in ['/home/dev/.mola', '/home/dev/.hyperwake']:
+        for suffix in ['state/machine-token', 'state/machine-id', 'state/computer-id', 'state/enrollment-key', 'ssh']:
+            if 'Inode:' in debugfs(disk, 'stat ' + base + '/' + suffix): raise ValueError('Factory image contains per-machine state')
+    for path in ['/home/dev/.ssh/authorized_keys', '/root/.ssh/authorized_keys', '/home/dev/.bash_history', '/etc/ssh/ssh_host_ed25519_key', '/etc/ssh/ssh_host_rsa_key', '/etc/ssh/ssh_host_ecdsa_key']:
+        if 'Inode:' in debugfs(disk, 'stat ' + path): raise ValueError('Factory image contains boot identity or user history')
+    machine_id = debugfs(disk, 'stat /etc/machine-id')
+    if 'Inode:' in machine_id and not re.search(r'\bSize:\s+0\b', machine_id): raise ValueError('Factory machine-id is not empty')
+    fsck(disk)
+    before = {name: digest(source / name) for name in required}
+    output.mkdir(parents=True, mode=0o700)
+    (output / 'STAGING_INCOMPLETE').touch(mode=0o600)
+    try:
+        for name in required:
+            subprocess.run(['cp', '--reflink=auto', '--sparse=always', str(source / name), str(output / name)], check=True)
+            (output / name).chmod(0o600)
+        shutil.copyfile(binary, output / 'mola-guest'); (output / 'mola-guest').chmod(0o755)
+        agent = {'schema': 1, 'file': 'mola-guest', 'architecture': architecture,
+                 'version': version, 'sha256': expected_digest}
+        write_json(output / 'guest-agent.json', agent)
+        refresh(output, output / 'root.ext4', architecture)
+        after = {name: digest(output / name) for name in required}
+        if any(after[name] != before[name] for name in required[1:]): raise ValueError('Kernel or initramfs unexpectedly changed')
+        if any(digest(source / name) != before[name] for name in required): raise ValueError('Factory source changed during staging')
+        for name in ['guest-manifest.json', 'provenance.json', 'packages.lock.txt', 'build-spec.json', 'LICENSE.omarchy']:
+            path = source / name
+            if path.is_file() and not path.is_symlink(): shutil.copyfile(path, output / name)
+        manifest = {'schema': 1, 'version': version, 'architecture': architecture,
+                    'created_at': datetime.now(timezone.utc).isoformat(), 'guest_agent': agent,
+                    'source_artifact_sha256': before,
+                    'artifacts': [{'name': name, 'url': name, 'sha256': after[name], 'bytes': (output / name).stat().st_size} for name in required]}
+        write_json(output / 'installed.json', manifest)
+        write_json(output / 'agent-update.json', {'schema': 1, 'version': version, 'source': str(source),
+                                                  'source_artifact_sha256': before, 'result_artifact_sha256': after,
+                                                  'guest_agent_sha256': expected_digest,
+                                                  'activation': 'not-activated'})
+        for path in output.iterdir():
+            if path.is_file():
+                with path.open('rb') as stream: os.fsync(stream.fileno())
+        (output / 'STAGING_INCOMPLETE').unlink()
+        descriptor = os.open(output, os.O_RDONLY)
+        try: os.fsync(descriptor)
+        finally: os.close(descriptor)
+        return {'staged_image': str(output), 'version': version, 'root_sha256': after['root.ext4'],
+                'guest_agent_sha256': expected_digest, 'source_unchanged': True, 'activated': False}
+    except Exception:
+        # Never mistake a partially patched directory for a validated image.
+        (output / 'STAGING_FAILED').touch(mode=0o600)
+        raise
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--image', type=Path, required=True, help='Known unbooted factory image directory')
+    parser.add_argument('--guest-binary', type=Path, required=True)
+    parser.add_argument('--expected-binary-sha256', required=True)
+    parser.add_argument('--out', type=Path, required=True, help='Fresh staging directory; never an active image symlink')
+    parser.add_argument('--version', required=True)
+    parser.add_argument('--architecture', choices=['x86_64', 'aarch64'], required=True)
+    args = parser.parse_args()
+    try: print(json.dumps(stage(args.image, args.guest_binary, args.out, args.version, args.expected_binary_sha256, args.architecture), indent=2))
+    except Exception as error: raise SystemExit(str(error))

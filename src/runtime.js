@@ -62,6 +62,9 @@ export class Runtime {
       guest_endpoint: `http://10.0.2.2:${process.env.MOLA_PORT || 4141}`,
       // Stock QEMU on HVF needs GICv3; the packaged runtime uses GICv2.
       gic_version: Number(process.env.MOLA_GIC || (this.host.acceleratedGraphics ? 2 : 3)),
+      // Hosted restores require the operator-pinned daemon sidecar so older
+      // snapshots can re-enrol after their credentials are rotated.
+      guest_agent_refresh: (process.env.MOLA_GUEST_AGENT_REFRESH ?? process.env.MOLA_HOST_API) === '1',
       max_running: Number(process.env.MOLA_MAX_RUNNING || 2),
       max_memory_mb: Number(process.env.MOLA_MAX_MEMORY_MB || 8192),
     };
@@ -127,6 +130,10 @@ export class Runtime {
     }
     return payload;
   }
+
+  storageOperation(id, verb, body) { return this.#call('POST', `/machines/${id}/${verb}`, body); }
+  snapshotManifest(id, snapshotId) { return this.#call('GET', `/machines/${id}/snapshots/${snapshotId}`); }
+  reseed(id, body) { return this.#call('POST', `/machines/${id}/reseed`, body); }
 
   create(spec) { return this.#call('POST', '/machines', spec); }
   describe(id) { return this.#call('GET', `/machines/${id}`); }

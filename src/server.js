@@ -7,6 +7,7 @@ import { operatorToken, authorised, present, validateSpec, validateAction } from
 import { desktopPage, attachDesktop, mintTicket, serveNovnc } from './desktop.js';
 import { guestKey } from './keys.js';
 import { HostApi, hostToken } from './host-api.js';
+import { attachSsh } from './ssh.js';
 
 const json = (response, status, body) => {
   const payload = JSON.stringify(body, null, 2);
@@ -257,6 +258,7 @@ export async function createServer({ host, port, registry = new Registry(), runt
   });
 
   attachDesktop(server);
+  attachSsh(server);
 
   return { server, runtime, registry, token };
 }

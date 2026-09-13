@@ -149,6 +149,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 		"interval", d.interval,
 	)
 
+	needsRegistration := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -156,15 +157,35 @@ func (d *Daemon) Run(ctx context.Context) error {
 		default:
 		}
 
+		if needsRegistration {
+			if err := d.ensureRegistered(ctx); err != nil {
+				if ctx.Err() != nil {
+					return nil
+				}
+				d.failures++
+				delay := d.backoff()
+				d.log.Warn("registration recovery failed", "error", err, "retry_in", delay)
+				d.sleep(ctx, delay)
+				continue
+			}
+			needsRegistration = false
+		}
+
 		stop, err := d.beat(ctx)
 		if err != nil {
-			// A rejected credential is terminal for this token: clear it and
-			// let the next boot re-register rather than hammering the endpoint.
+			// A restored disk carries an old bearer credential, but this boot's
+			// config already contains the fresh identity seed. Clear only the
+			// rejected token and re-enroll in this process: the entrypoint does
+			// not restart an exited daemon while the desktop remains running.
 			if errors.Is(err, client.ErrUnauthorized) {
-				d.log.Error("machine credential rejected, clearing local state")
-				_ = d.store.Clear()
-
-				return err
+				d.log.Warn("machine credential rejected, recovering registration")
+				if err := d.store.Clear(); err != nil {
+					return fmt.Errorf("clear rejected machine credential: %w", err)
+				}
+				needsRegistration = true
+				d.failures++
+				d.sleep(ctx, d.backoff())
+				continue
 			}
 
 			d.failures++
