@@ -28,6 +28,8 @@ def write_json(path, value):
     temporary = path.with_suffix('.new')
     with temporary.open('w', encoding='utf-8') as stream:
         json.dump(value, stream, indent=2)
+        stream.flush()
+        os.fsync(stream.fileno())
     os.chmod(temporary, 0o600)
     temporary.replace(path)
 
@@ -166,7 +168,12 @@ class Runner:
     def create(self, spec):
         identifier = spec['computer_id']
         folder = self.folder(identifier)
-        if (folder / 'machine.json').exists(): return self.describe(identifier)
+        fingerprint = hashlib.sha256(json.dumps(spec, sort_keys=True).encode()).hexdigest()
+        if (folder / 'machine.json').exists():
+            existing = self.metadata(identifier)
+            if existing.get('create_fingerprint') and existing['create_fingerprint'] != fingerprint:
+                raise ValueError('Machine ID already holds a different create specification')
+            return self.describe(identifier)
         if folder.exists(): raise ValueError('Incomplete machine directory; inspect it before retrying')
         cpus, memory, disk_gb = spec['vcpus'], spec['memory_mb'], spec['disk_gb']
         if not all(type(n) is int for n in [cpus, memory, disk_gb]): raise ValueError('Resources must be integers')
@@ -193,7 +200,22 @@ class Runner:
         retained = self.root / 'retained' / (identifier + '.ext4')
         if retained.exists():
             raise ValueError('A retained disk exists; explicit recovery is required')
+        destination = folder
+        folder = self.machines / ('.creating-' + identifier)
+        # Only an unpublished clone with exactly this intent may be discarded.
+        # A crash during copy therefore retries the same ID without touching a
+        # live machine, a retained disk, or an unrelated directory.
+        if folder.is_symlink(): raise ValueError('Unsafe staging directory')
+        if folder.exists():
+            marker = folder / 'intent.json'
+            if marker.exists():
+                if json.loads(marker.read_text()).get('fingerprint') != fingerprint:
+                    raise ValueError('Staging directory belongs to another create intent')
+            elif any(folder.iterdir()):
+                raise ValueError('Unrecognized staging directory')
+            shutil.rmtree(folder)
         folder.mkdir(mode=0o700)
+        write_json(folder / 'intent.json', {'fingerprint': fingerprint})
         disk = folder / 'root.ext4'
         if platform.system() == 'Darwin':
             subprocess.run(['cp', '-c', str(self.image / 'root.ext4'), str(disk)], check=True)
@@ -213,8 +235,9 @@ class Runner:
         while len(ports) < 3: ports.add(free_port())
         ssh_port, vnc_port, qmp_port = sorted(ports)
         data = {'managed_by': 'mola-native-v1', 'id': identifier, 'vcpus': cpus, 'memory_mb': memory,
-                'ssh_port': ssh_port, 'vnc_port': vnc_port, 'qmp_port': qmp_port}
+                'ssh_port': ssh_port, 'vnc_port': vnc_port, 'qmp_port': qmp_port, 'create_fingerprint': fingerprint}
         write_json(folder / 'machine.json', data)
+        folder.rename(destination)
         return self.describe(identifier)
 
     def command(self, data):
@@ -280,8 +303,13 @@ class Runner:
         if self.status(data) != 'stopped': raise ValueError('Stop the computer before deleting it')
         if not delete_disk:
             retained.parent.mkdir(exist_ok=True, mode=0o700)
-            if retained.exists(): raise ValueError('Retained disk already exists')
-            (folder / 'root.ext4').rename(retained)
+            if retained.exists():
+                if not data.get('retaining_disk') or (folder / 'root.ext4').exists():
+                    raise ValueError('Retained disk already exists')
+            else:
+                data['retaining_disk'] = True
+                write_json(folder / 'machine.json', data)
+                (folder / 'root.ext4').rename(retained)
         shutil.rmtree(folder)
 
     def list(self):

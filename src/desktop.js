@@ -44,12 +44,13 @@ export function serveNovnc(pathname, response) {
  * the page reads `location.hash` and opens the socket itself.
  */
 const tickets = new Map();
+const activeTargets = new Set();
 const TTL_MS = 60_000;
 
-export function mintTicket(machineId, described) {
+export function mintTicket(machineId, described, binding = null) {
   const ticket = randomBytes(24).toString('base64url');
   tickets.set(createHash('sha256').update(ticket).digest('hex'), {
-    machineId,
+    machineId, binding, revoked: false,
     host: described.display_host === 'host.docker.internal' ? '127.0.0.1' : described.display_host,
     port: described.display_port,
     expires: Date.now() + TTL_MS,
@@ -65,10 +66,24 @@ function redeem(ticket) {
   return entry.expires > Date.now() ? entry : null;
 }
 
+/** Revoke both unredeemed tickets and pending/connected transports before mutation. */
+export function revokeDesktop(machineId) {
+  for (const [key, target] of tickets) {
+    if (target.machineId === machineId) { target.revoked = true; tickets.delete(key); }
+  }
+  for (const target of activeTargets) {
+    if (target.machineId === machineId) {
+      target.revoked = true;
+      target.upstream?.destroy();
+      target.client?.terminate();
+    }
+  }
+}
+
 export function attachDesktop(server) {
   const sockets = new WebSocketServer({ noServer: true });
 
-  server.on('upgrade', (request, socket, head) => {
+  server.on('upgrade', async (request, socket, head) => {
     const url = new URL(request.url, 'http://localhost');
     if (url.pathname !== '/desktop/socket') return socket.destroy();
 
@@ -78,8 +93,23 @@ export function attachDesktop(server) {
       return socket.destroy();
     }
 
+    // Keep the lease visible while the asynchronous runtime check is pending.
+    // Stop/start/destroy can revoke it during that await, before any dial.
+    activeTargets.add(target);
+    socket.once('close', () => activeTargets.delete(target));
+    let allowed = !target.revoked;
+    try { if (target.binding) allowed = allowed && await target.binding.validate(target.binding); }
+    catch { allowed = false; }
+    if (!allowed || target.revoked || target.expires <= Date.now() || socket.destroyed) {
+      activeTargets.delete(target);
+      if (!socket.destroyed) socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      return socket.destroy();
+    }
+
     sockets.handleUpgrade(request, socket, head, (client) => {
+      target.client = client;
       const upstream = connect(target.port, target.host);
+      target.upstream = upstream;
       upstream.on('error', () => client.close());
       client.on('error', () => upstream.destroy());
       upstream.on('data', (chunk) => client.readyState === 1 && client.send(chunk));

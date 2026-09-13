@@ -143,11 +143,16 @@ export class Runtime {
    * caller who has just asked to stop one should not have to poll before
    * asking to delete it.
    */
-  async settle(id, { attempts = 40, every = 500 } = {}) {
-    try { await this.forceStop(id); } catch { /* already gone */ }
+  async settle(id, { attempts = 40, every = 500, strict = false } = {}) {
+    try { await this.forceStop(id); } catch (error) {
+      if (strict && error.status !== 404) throw error;
+    }
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       let described;
-      try { described = await this.describe(id); } catch { return; }
+      try { described = await this.describe(id); } catch (error) {
+        if (strict && error.status !== 404) throw error;
+        return;
+      }
       if (described.status === 'stopped') return;
       await delay(every);
     }

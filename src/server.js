@@ -6,6 +6,7 @@ import { runAction } from './automation.js';
 import { operatorToken, authorised, present, validateSpec, validateAction } from './api.js';
 import { desktopPage, attachDesktop, mintTicket, serveNovnc } from './desktop.js';
 import { guestKey } from './keys.js';
+import { HostApi, hostToken } from './host-api.js';
 
 const json = (response, status, body) => {
   const payload = JSON.stringify(body, null, 2);
@@ -25,12 +26,18 @@ async function readBody(request, limit = 2 * 1024 * 1024) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export async function createServer({ host, port }) {
-  const registry = new Registry();
-  const runtime = new Runtime(host);
+export async function createServer({ host, port, registry = new Registry(), runtime = new Runtime(host), keys = guestKey() }) {
   const guests = new GuestService(registry);
   const token = operatorToken();
-  const keys = guestKey();
+  const hostApi = new HostApi({
+    registry, runtime, publicKey: keys.publicKey, token: hostToken(token),
+    desktop: (id, described, binding) => ({
+      desktop_url: `http://127.0.0.1:${port}/desktop#t=${mintTicket(id, described, {
+        ...binding, validate: captured => hostApi.validateDesktop(id, captured),
+      })}`, expires_in: 60,
+    }),
+    action: runAction,
+  });
 
   await runtime.start();
 
@@ -107,6 +114,14 @@ export async function createServer({ host, port }) {
         return json(response, 404, { message: 'Not found.' });
       }
 
+      if (parts[0] === 'internal' && parts[1] === 'v1') {
+        // Authenticate before parsing a potentially expensive request body.
+        if (!hostApi.token) return json(response, 404, { message: 'Not found.' });
+        if (!authorised(request, hostApi.token)) return json(response, 401, { message: 'Unauthenticated.' });
+        const result = await hostApi.handle(request, parts.slice(2), method === 'POST' ? await readBody(request) : {});
+        return json(response, result.status, result.body);
+      }
+
       // ---- everything else needs the operator token ------------------------
       if (!authorised(request, token)) return json(response, 401, { message: 'Unauthenticated. Send Authorization: Bearer <token>.' });
 
@@ -133,7 +148,7 @@ export async function createServer({ host, port }) {
       if (parts[1] !== 'machines') return json(response, 404, { message: 'Not found.' });
 
       if (method === 'GET' && parts.length === 2) {
-        const machines = await Promise.all(registry.all().map(async (record) => present(record, await describe(record.id))));
+        const machines = await Promise.all(registry.all().filter(record => !record.cloud?.deleted).map(async (record) => present(record, await describe(record.id))));
         return json(response, 200, { data: machines });
       }
 
@@ -173,7 +188,8 @@ export async function createServer({ host, port }) {
       }
 
       const record = parts.length >= 3 ? registry.get(parts[2]) : null;
-      if (!record) return json(response, 404, { message: 'No such machine.' });
+      if (!record || record.cloud?.deleted) return json(response, 404, { message: 'No such machine.' });
+      if (record.cloud && method !== 'GET') return json(response, 409, { message: 'Cloud-managed machines must use the private host API.' });
 
       if (method === 'GET' && parts.length === 3) {
         return json(response, 200, { data: present(record, await describe(record.id)) });
@@ -232,8 +248,11 @@ export async function createServer({ host, port }) {
 
       return json(response, 405, { message: 'Method not allowed.' });
     } catch (error) {
-      const status = error.status && error.status < 500 ? error.status : 400;
-      return json(response, status, { message: error.message || 'Request failed.' });
+      const status = error.status && error.status >= 400 && error.status <= 599 ? error.status
+        : (url.pathname.startsWith('/internal/v1/') && !(error instanceof SyntaxError) ? 502 : 400);
+      return json(response, status, { message: error.message || 'Request failed.',
+        ...(error.code === 'machine_not_found' ? { code: error.code } : {}),
+      });
     }
   });
 

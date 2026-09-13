@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, openSync, fsyncSync, closeSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { dirname } from 'node:path';
 import { statePath } from './paths.js';
 
 /**
@@ -19,7 +20,13 @@ export class Registry {
   flush() {
     const temporary = `${this.file}.new`;
     writeFileSync(temporary, JSON.stringify(this.records, null, 2), { mode: 0o600 });
+    const descriptor = openSync(temporary, 'r');
+    try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
     renameSync(temporary, this.file);
+    if (process.platform !== 'win32') {
+      const directory = openSync(dirname(this.file), 'r');
+      try { fsyncSync(directory); } finally { closeSync(directory); }
+    }
   }
 
   all() {
