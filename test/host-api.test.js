@@ -98,6 +98,28 @@ test('failed ambiguous mutations block overtaking commands until same operation 
   await s.send(`machines/${s.create.id}/shutdown`, command(3));
 });
 
+test('deterministic host capacity refusal is terminal and does not block destroy', async t => {
+  const s = setup(t); await s.send('machines', s.create);
+  const start = command(2);
+  s.runtime.startMachine = async () => {
+    throw Object.assign(new Error('Native host running-computer limit reached'), { status: 422 });
+  };
+
+  const refused = await s.send(`machines/${s.create.id}/start`, start);
+  assert.deepEqual(refused, {
+    status: 422,
+    body: { error: 'Native host running-computer limit reached' },
+  });
+  s.reload();
+  assert.deepEqual(await s.send(`machines/${s.create.id}/start`, start), refused);
+  assert.equal((await s.send(`machines/${s.create.id}`, {}, 'GET')).body.data.status, 'stopped');
+
+  const removed = await s.send(`machines/${s.create.id}/destroy`, {
+    ...command(2), delete_disk: true,
+  });
+  assert.equal(removed.body.data.deleted, true);
+});
+
 test('concurrent retries serialize into one runtime mutation', async t => {
   const s = setup(t);
   await Promise.all(Array.from({ length: 8 }, () => s.send('machines', s.create)));

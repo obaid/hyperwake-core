@@ -239,7 +239,24 @@ export class HostApi {
       }
       record.desired_state = 'running';
       this.registry.flush();
-      await this.runtime.startMachine(id);
+      try {
+        await this.runtime.startMachine(id);
+      } catch (error) {
+        // The native runner checks these limits before it writes launch intent
+        // or starts QEMU. They are known refusals rather than ambiguous runtime
+        // outcomes, so settle the journal entry and let later lifecycle work
+        // (especially destroy) proceed. Unknown transport and runtime failures
+        // must remain pending for an exact retry.
+        if (error.status !== 422 || ![
+          'Native host memory limit reached',
+          'Native host running-computer limit reached',
+        ].includes(error.message)) throw error;
+        record.desired_state = 'stopped';
+        const result = { status: error.status, body: { error: error.message } };
+        operation.result = result;
+        this.registry.flush();
+        return result;
+      }
     } else if (verb === 'shutdown' || verb === 'force-stop') {
       this.registry.update(id, { desired_state: 'stopped' });
       if (verb === 'shutdown') await this.runtime.shutdown(id);
