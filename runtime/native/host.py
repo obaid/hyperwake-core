@@ -24,6 +24,8 @@ import threading
 import time
 
 ID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+SNAPSHOT_CHUNK_BYTES = 8 * 1024 * 1024
+SNAPSHOT_CHUNK_ENCODED_BYTES = 11184812
 
 
 def write_json(path, value):
@@ -541,7 +543,7 @@ class Runner:
         offset = payload['offset']
         if type(offset) is not int or offset < 0: raise ValueError('Invalid chunk offset')
         encoded = payload.get('data')
-        if not isinstance(encoded, str) or len(encoded) > 1048576: raise ValueError('Chunk exceeds 768 KiB')
+        if not isinstance(encoded, str) or len(encoded) > SNAPSHOT_CHUNK_ENCODED_BYTES: raise ValueError('Chunk exceeds 8 MiB')
         chunk = base64.b64decode(encoded, validate=True)
         if not chunk or hashlib.sha256(chunk).hexdigest() != payload.get('sha256'): raise ValueError('Chunk checksum mismatch')
         if offset + len(chunk) > manifest['artifact_bytes']: raise ValueError('Chunk exceeds artifact size')
@@ -576,7 +578,7 @@ class Runner:
         offset = payload['offset']
         if type(offset) is not int or not 0 <= offset < manifest['artifact_bytes']: raise ValueError('Invalid chunk offset')
         with (self.storage_path(identifier, payload['snapshot_id']) / 'disk.gz').open('rb') as stream:
-            stream.seek(offset); chunk = stream.read(768 * 1024)
+            stream.seek(offset); chunk = stream.read(SNAPSHOT_CHUNK_BYTES)
         return {'offset': offset, 'next_offset': offset + len(chunk), 'data': base64.b64encode(chunk).decode(),
                 'sha256': hashlib.sha256(chunk).hexdigest(), 'eof': offset + len(chunk) == manifest['artifact_bytes']}
 

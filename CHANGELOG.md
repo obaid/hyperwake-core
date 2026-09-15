@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 — 2026-09-15
+
+- Increase resumable hosted snapshot chunks from 768 KiB to 8 MiB so large
+  off-host archives finish with far fewer host and object-storage requests.
+- Raise the private host API body limit only for authenticated snapshot writes;
+  all other request limits remain unchanged.
+
 ## 1.2.0 — 2026-09-13
 
 Adds an opt-in private host API for a separate control plane, while keeping the
