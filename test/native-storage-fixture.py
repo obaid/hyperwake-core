@@ -13,6 +13,8 @@ import urllib.request
 spec = importlib.util.spec_from_file_location('mola_host', sys.argv[1])
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
+m.SNAPSHOT_CHUNK_BYTES = 256 * 1024
+m.SNAPSHOT_CHUNK_ENCODED_BYTES = 349528
 ID = '11111111-1111-4111-8111-111111111111'
 SNAPSHOT = '22222222-2222-4222-8222-222222222222'
 

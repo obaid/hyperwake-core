@@ -3,6 +3,8 @@ import { revokeDesktop } from './desktop.js';
 import { revokeSsh } from './ssh.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+export const SNAPSHOT_CHUNK_BYTES = 8 * 1024 * 1024;
+export const SNAPSHOT_CHUNK_ENCODED_BYTES = Math.ceil(SNAPSHOT_CHUNK_BYTES / 3) * 4;
 const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
 const stable = value => JSON.stringify(value, (_, item) => item && typeof item === 'object' && !Array.isArray(item)
   ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
@@ -22,7 +24,7 @@ export async function storageOperation(api, id, verb, body) {
   if (verb !== 'fence' && !UUID.test(body.snapshot_id || '')) fail(400, 'snapshot_id must be a UUID.');
   if (chunk) {
     if (!Number.isSafeInteger(body.offset) || body.offset < 0) fail(400, 'offset must be a nonnegative integer.');
-    if (verb === 'snapshot-write' && (typeof body.data !== 'string' || body.data.length > 1048576
+    if (verb === 'snapshot-write' && (typeof body.data !== 'string' || body.data.length > SNAPSHOT_CHUNK_ENCODED_BYTES
       || !/^[0-9a-f]{64}$/.test(body.sha256 || ''))) fail(400, 'Invalid snapshot chunk.');
     return { status: 200, body: { data: await api.runtime.storageOperation(id, verb, body) } };
   }

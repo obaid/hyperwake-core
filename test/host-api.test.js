@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Registry } from '../src/state.js';
 import { HostApi, hostToken, hostDescription } from '../src/host-api.js';
+import { SNAPSHOT_CHUNK_ENCODED_BYTES } from '../src/host-storage.js';
 
 const TOKEN = 'h'.repeat(40);
 function setup(t) {
@@ -400,7 +401,7 @@ test('storage rejects running snapshots, arbitrary paths, stale generations and 
   await assert.rejects(s.send(`machines/${id}/snapshot`, { ...command(2), snapshot_id: '../../disk' }), e => e.status === 400);
   await assert.rejects(s.send(`machines/${id}/snapshot-import`, { ...command(1), snapshot_id: randomUUID(), manifest: {} }), conflict);
   await assert.rejects(s.send(`machines/${id}/snapshot-read`, { snapshot_id: randomUUID(), offset: 0, url: 'http://localhost' }), e => e.status === 400);
-  await assert.rejects(s.send(`machines/${id}/snapshot-write`, { snapshot_id: randomUUID(), offset: 0, sha256: 'a'.repeat(64), data: 'x'.repeat(1048577) }), e => e.status === 400);
+  await assert.rejects(s.send(`machines/${id}/snapshot-write`, { snapshot_id: randomUUID(), offset: 0, sha256: 'a'.repeat(64), data: 'x'.repeat(SNAPSHOT_CHUNK_ENCODED_BYTES + 1) }), e => e.status === 400);
 });
 
 test('source fencing is durable before runtime call and blocks delayed successful starts after reload', async t => {
